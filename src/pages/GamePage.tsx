@@ -25,6 +25,24 @@ const PHASE_LABEL: Record<string, string> = {
   event: '이벤트', voting: '투표', check_win: '승리 체크', finished: '종료',
 }
 
+// Firebase는 빈 배열/객체를 null로 저장하므로 정규화 필요
+function normalizeGame(g: GameState): GameState {
+  return {
+    ...g,
+    playerOrder:            g.playerOrder            ?? [],
+    setupPlacementOrder:    g.setupPlacementOrder    ?? [],
+    declarationOrder:       g.declarationOrder       ?? [],
+    resolvedMoves:          g.resolvedMoves          ?? [],
+    winners:                g.winners                ?? [],
+    characterDeclarations:  g.characterDeclarations  ?? {},
+    destinationStatus:      g.destinationStatus      ?? {},
+    sealedDestinations:     g.sealedDestinations     ?? {},
+    characters:             g.characters             ?? {},
+    zones:                  g.zones                  ?? {} as GameState['zones'],
+    finalScores:            g.finalScores            ?? {},
+  }
+}
+
 interface Props { roomCode: string; onLeave: () => void }
 
 export default function GamePage({ roomCode, onLeave }: Props) {
@@ -37,7 +55,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const uid = getCurrentUid()
 
   useEffect(() => {
-    const unsubGame = subscribeToGame(roomCode, setGame)
+    const unsubGame = subscribeToGame(roomCode, g => setGame(g ? normalizeGame(g) : null))
     const unsubPlayers = subscribeToPlayers(roomCode, setPlayers)
     const unsubMeta = subscribeToMeta(roomCode, setMeta)
     return () => { unsubGame(); unsubPlayers(); unsubMeta() }
