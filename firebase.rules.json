@@ -42,10 +42,26 @@
             ".read": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()"
           },
 
+          "characterDeclarations": {
+            "$playerId": {
+              ".read": true,
+              ".write": "auth.uid === $playerId"
+            }
+          },
+
           "sealedDestinations": {
             "$playerId": {
               ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
               ".write": "auth.uid === $playerId"
+            }
+          },
+
+          "currentVote": {
+            "votes": {
+              "$playerId": { ".write": "auth.uid === $playerId" }
+            },
+            "status": {
+              "$playerId": { ".write": "auth.uid === $playerId" }
             }
           },
 
@@ -57,7 +73,7 @@
           },
 
           "$other": {
-            ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()"
+            ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val() || root.child('games').child($roomId).child('game/phase').val() === 'setup_place'"
           }
         },
 
