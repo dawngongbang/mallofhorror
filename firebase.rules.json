@@ -29,7 +29,6 @@
           "zones":                  { ".read": true },
           "setupPlacementOrder":    { ".read": true },
           "setupDiceRoll":          { ".read": true },
-          "characterDeclarations":  { ".read": true },
           "declarationOrder":       { ".read": true },
           "destinationStatus":      { ".read": true },
           "resolvedMoves":          { ".read": true },
