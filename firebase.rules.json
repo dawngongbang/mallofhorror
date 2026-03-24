@@ -31,10 +31,12 @@
           "setupPlacementOrder":    { ".read": true },
           "setupDiceRoll":          { ".read": true },
           "declarationOrder":       { ".read": true },
-          "destinationStatus":      { ".read": true },
+          "destinationStatus": {
+            ".read": true,
+            "$playerId": { ".write": "auth.uid === $playerId" }
+          },
           "resolvedMoves":          { ".read": true },
           "currentEventZoneIndex":  { ".read": true },
-          "currentVote":            { ".read": true },
           "itemSearchPreview":      { ".read": true },
           "cardReactionWindow":     { ".read": true },
           "winners":                { ".read": true },
