@@ -27,6 +27,23 @@ const PHASE_LABEL: Record<string, string> = {
 
 // Firebase는 빈 배열/객체를 null로 저장하므로 정규화 필요
 function normalizeGame(g: GameState): GameState {
+  // 각 zone의 characterIds 정규화
+  const zones = g.zones ?? {} as GameState['zones']
+  const normalizedZones = Object.fromEntries(
+    Object.entries(zones).map(([k, z]) => [k, { ...z, characterIds: (z as any).characterIds ?? [] }])
+  ) as GameState['zones']
+
+  // currentVote 내부 배열 정규화
+  const cv = g.currentVote
+  const normalizedVote = cv ? {
+    ...cv,
+    eligibleVoters: cv.eligibleVoters ?? [],
+    candidates:     cv.candidates     ?? [],
+    votes:          cv.votes          ?? {},
+    status:         cv.status         ?? {},
+    bonusVoteWeights: cv.bonusVoteWeights ?? {},
+  } : null
+
   return {
     ...g,
     playerOrder:            g.playerOrder            ?? [],
@@ -38,8 +55,9 @@ function normalizeGame(g: GameState): GameState {
     destinationStatus:      g.destinationStatus      ?? {},
     sealedDestinations:     g.sealedDestinations     ?? {},
     characters:             g.characters             ?? {},
-    zones:                  g.zones                  ?? {} as GameState['zones'],
+    zones:                  normalizedZones,
     finalScores:            g.finalScores            ?? {},
+    currentVote:            normalizedVote,
   }
 }
 
