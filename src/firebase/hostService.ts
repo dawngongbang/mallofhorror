@@ -28,10 +28,8 @@ export async function startGame(
     await writePrivateItems(roomCode, player.id, playerItems[player.id] ?? [])
   }
 
-  await Promise.all([
-    writeGameState(roomCode, state),
-    updateRoomStatus(roomCode, 'playing'),
-  ])
+  await writeGameState(roomCode, state)
+  await updateRoomStatus(roomCode, 'playing')
 }
 
 // ── 주사위 굴리기 (호스트 전용) ──────────────────────────────
