@@ -6,7 +6,7 @@ import { rollZombieDice, rollSetupDice, isZoneFull } from './dice'
 // 게임 초기 상태 생성
 export function createInitialGameState(
   players: Player[],
-  settings: GameSettings
+  _settings: GameSettings
 ): GameState {
   const playerIds = players.map(p => p.id)
   const actualCount = Math.max(3, Math.min(6, players.length))
