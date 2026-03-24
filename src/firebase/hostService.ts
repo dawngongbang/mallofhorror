@@ -4,6 +4,7 @@ import { writeGameState, patchGameState, clearPendingItemActions, writePrivateIt
 import { updateRoomStatus } from './roomService'
 import type { GameState, GameSettings, Player } from '../engine/types'
 import { createInitialGameState } from '../engine/setup'
+import { createItemDeck, shuffle, dealItems } from '../engine/items'
 import { rollZombieDice, applyZombiePlacement, applyBonusZombies } from '../engine/dice'
 import { resolveMovesInOrder } from '../engine/movement'
 import { calculateVoteResult } from '../engine/combat'
@@ -21,9 +22,10 @@ export async function startGame(
   const playerList = Object.values(players)
   const state = createInitialGameState(playerList, settings)
 
-  // 각 플레이어의 초기 아이템을 private 경로에 기록
+  // 아이템 배분: state.itemDeck은 배분 후 남은 덱이므로, 직접 배분해서 private 경로에 기록
+  const { playerItems } = dealItems(shuffle(createItemDeck()), playerList.map(p => p.id))
   for (const player of playerList) {
-    await writePrivateItems(roomCode, player.id, player.itemIds)
+    await writePrivateItems(roomCode, player.id, playerItems[player.id] ?? [])
   }
 
   await Promise.all([
