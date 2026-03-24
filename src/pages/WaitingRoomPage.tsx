@@ -51,7 +51,8 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const playerList = Object.values(players)
   const myPlayer = uid ? players[uid] : undefined
   const usedColors = playerList.map(p => p.color)
-  const allReady = playerList.length >= 3 && playerList.every(p => p.isReady)
+  // 호스트는 준비 버튼이 없으므로 ready 체크에서 제외
+  const allReady = playerList.length >= 3 && playerList.every(p => p.isReady || p.id === meta?.hostId)
 
   async function handleColorChange(color: PlayerColor) {
     if (!roomCode) return
