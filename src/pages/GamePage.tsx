@@ -9,7 +9,8 @@ import { hostRollDice, hostResolveMovement, hostResolveVote, hostEndRound } from
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase } from '../engine/event'
 import { calculateVoteResult } from '../engine/combat'
-import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS } from '../engine/constants'
+import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
+import { isZoneFull } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
 
 const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
@@ -67,7 +68,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [game, setGame] = useState<GameState | null>(null)
   const [players, setPlayers] = useState<Record<string, Player>>({})
   const [meta, setMeta] = useState<RoomMeta | null>(null)
-  const [placementOptions, setPlacementOptions] = useState<ZoneName[]>([])
+  const [selectedSetupCharId, setSelectedSetupCharId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const processingRef = useRef(false)
   const uid = getCurrentUid()
@@ -167,23 +168,36 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const sheriffId = game.playerOrder[game.sheriffIndex]
 
   // ── setup_place ──────────────────────────────────────────────
-  const currentSetupCharId = game.setupPlacementOrder[0] ?? null
-  const currentSetupChar = currentSetupCharId ? game.characters[currentSetupCharId] : null
-  const isMyTurnToPlace = currentSetupChar?.playerId === uid
+  const currentSetupPlayerId = game.setupPlacementOrder[0] ?? null
+  const isMyTurnToPlace = currentSetupPlayerId === uid
+
+  // 주사위 결과로 배치 가능한 구역 계산 (Firebase에서 직접 파생)
+  const setupZoneOptions: ZoneName[] = (() => {
+    if (!game.setupDiceRoll) return []
+    const d = game.setupDiceRoll as [number, number]
+    const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
+    const candidates = z1 === z2 ? [z1] : [z1, z2]
+    const available = candidates.filter(z => !isZoneFull(z, game))
+    return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game))
+  })()
+
+  // 내 미배치 캐릭터 목록
+  const myUnplacedChars = uid
+    ? Object.values(game.characters).filter(c => c.playerId === uid && c.isAlive && c.zone === 'parking')
+    : []
 
   async function handleRollSetup() {
     if (!game || actionLoading) return
     setActionLoading(true)
-    const { state: next, options } = rollAndGetPlacementOptions(game)
+    const { state: next } = rollAndGetPlacementOptions(game)
     await patchGameState(roomCode, { setupDiceRoll: next.setupDiceRoll })
-    setPlacementOptions(options)
     setActionLoading(false)
   }
 
-  async function handlePlaceCharacter(zone: ZoneName) {
-    if (!game || !currentSetupCharId || actionLoading) return
+  async function handlePlaceCharacter(charInstanceId: string, zone: ZoneName) {
+    if (!game || !charInstanceId || actionLoading) return
     setActionLoading(true)
-    let next = placeCharacter(game, currentSetupCharId, zone)
+    let next = placeCharacter(game, charInstanceId, zone)
     if (next.setupPlacementOrder.length === 0) next = startFirstRound(next)
     await patchGameState(roomCode, {
       characters: next.characters,
@@ -195,7 +209,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         currentEventZoneIndex: 0,
       } : {}),
     })
-    setPlacementOptions([])
+    setSelectedSetupCharId(null)
     setActionLoading(false)
   }
 
@@ -305,50 +319,78 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     switch (game!.phase) {
       // ── 초기 배치 ───────────────────────────────────────────
       case 'setup_place': {
-        if (!currentSetupChar) return <p className="text-zinc-400 text-sm">배치 완료 대기 중...</p>
-        const owner = players[currentSetupChar.playerId]
-        const charConfig = CHARACTER_CONFIGS[currentSetupChar.characterId]
+        if (!currentSetupPlayerId) return <p className="text-zinc-400 text-sm">배치 완료 대기 중...</p>
+        const currentOwner = players[currentSetupPlayerId]
 
         if (!isMyTurnToPlace) {
           return (
             <div className="text-center">
               <p className="text-zinc-400 text-sm">
-                <span className="text-white font-bold">{owner?.nickname}</span>님의{' '}
-                <span className="text-yellow-400 font-bold">{charConfig?.name}</span> 배치 중...
+                <span className="text-white font-bold">{currentOwner?.nickname}</span>님이 캐릭터 배치 중...
               </p>
-              <p className="text-zinc-600 text-xs mt-1">남은 배치: {game!.setupPlacementOrder.length}개</p>
+              <p className="text-zinc-600 text-xs mt-1">남은 배치: {game!.setupPlacementOrder.length}번</p>
             </div>
           )
         }
 
-        if (placementOptions.length > 0 || game!.setupDiceRoll) {
-          const options = placementOptions.length > 0 ? placementOptions : ZONE_ORDER
+        // 주사위 굴리기 전
+        if (!game!.setupDiceRoll) {
           return (
             <div>
-              <p className="text-white text-sm font-bold mb-2">
-                <span className="text-yellow-400">{charConfig?.name}</span> 배치할 구역 선택
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {options.map(zone => (
-                  <button key={zone} onClick={() => handlePlaceCharacter(zone)} disabled={actionLoading}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
-                    {ZONE_CONFIGS[zone].displayName}
-                  </button>
-                ))}
-              </div>
+              <p className="text-white text-sm font-bold mb-3">내 차례 — 주사위를 굴려 배치 구역을 결정하세요</p>
+              <button onClick={handleRollSetup} disabled={actionLoading}
+                className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-semibold px-6 py-2 rounded-xl text-sm transition-colors">
+                {actionLoading ? '굴리는 중...' : '🎲 주사위 굴리기'}
+              </button>
             </div>
           )
         }
 
+        // 주사위 결과 공개 후 — 캐릭터 & 구역 선택
+        const d = game!.setupDiceRoll as [number, number]
         return (
           <div>
-            <p className="text-white text-sm font-bold mb-2">
-              내 차례: <span className="text-yellow-400">{charConfig?.name}</span> 배치
+            <p className="text-xs text-zinc-500 mb-2">
+              🎲 주사위: {d[0]}, {d[1]} →{' '}
+              <span className="text-yellow-400">{setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}</span>
             </p>
-            <button onClick={handleRollSetup} disabled={actionLoading}
-              className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-semibold px-6 py-2 rounded-xl text-sm transition-colors">
-              {actionLoading ? '굴리는 중...' : '🎲 주사위 굴리기'}
-            </button>
+
+            {/* 캐릭터 선택 */}
+            <p className="text-white text-sm font-bold mb-2">배치할 캐릭터 선택</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {myUnplacedChars.map(char => {
+                const cfg = CHARACTER_CONFIGS[char.characterId]
+                const isSelected = selectedSetupCharId === char.id
+                return (
+                  <button key={char.id}
+                    onClick={() => setSelectedSetupCharId(isSelected ? null : char.id)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      isSelected
+                        ? 'bg-yellow-500 text-black'
+                        : 'bg-zinc-700 hover:bg-zinc-600 text-white'
+                    }`}>
+                    {cfg?.name}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 구역 선택 (캐릭터 선택 후 활성화) */}
+            {selectedSetupCharId && (
+              <>
+                <p className="text-white text-sm font-bold mb-2">배치할 구역 선택</p>
+                <div className="flex flex-wrap gap-2">
+                  {setupZoneOptions.map(zone => (
+                    <button key={zone}
+                      onClick={() => handlePlaceCharacter(selectedSetupCharId, zone)}
+                      disabled={actionLoading}
+                      className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
+                      {ZONE_CONFIGS[zone].displayName}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )
       }

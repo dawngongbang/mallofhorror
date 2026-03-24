@@ -44,7 +44,7 @@ export function createInitialGameState(
 
   // 배치 순서: 보안관부터, 캐릭터 수만큼 반복
   // 예) 플레이어 [A,B,C], 캐릭터 3개 → [A,B,C, A,B,C, A,B,C]
-  const setupPlacementOrder = buildSetupOrder(playerIds, characterIds.length, characters)
+  const setupPlacementOrder = buildSetupOrder(playerIds, characterIds.length)
 
   // 보안관 인덱스 랜덤 선정
   const sheriffIndex = Math.floor(Math.random() * playerIds.length)
@@ -96,28 +96,15 @@ function initZones(): Record<ZoneName, { zombies: number; characterIds: string[]
 }
 
 // 초기 배치 순서 생성
-// 보안관부터 시작해서 플레이어 순으로, 캐릭터 수만큼 반복
-// 반환: 배치해야 할 캐릭터 인스턴스 ID 배열 (순서대로)
-function buildSetupOrder(
-  playerOrder: string[],
-  charsPerPlayer: number,
-  characters: Record<string, Character>
-): string[] {
+// 반환: 배치 차례인 플레이어 ID 배열 (캐릭터 수만큼 반복)
+// 플레이어가 직접 배치할 캐릭터를 선택함
+function buildSetupOrder(playerOrder: string[], charsPerPlayer: number): string[] {
   const order: string[] = []
-
   for (let round = 0; round < charsPerPlayer; round++) {
     for (const playerId of playerOrder) {
-      // 이 플레이어의 아직 배치 안 된 캐릭터 중 첫 번째
-      const unplaced = Object.values(characters)
-        .filter(c => c.playerId === playerId && c.zone === 'parking')
-        .map(c => c.id)
-
-      if (unplaced[round]) {
-        order.push(unplaced[round])
-      }
+      order.push(playerId)
     }
   }
-
   return order
 }
 
