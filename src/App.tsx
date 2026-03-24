@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { signInAsGuest } from './firebase/auth'
 import LobbyPage from './pages/LobbyPage'
 import WaitingRoomPage from './pages/WaitingRoomPage'
+import GamePage from './pages/GamePage'
 
 export type AppScreen =
   | { screen: 'lobby' }
   | { screen: 'waiting'; roomCode: string }
+  | { screen: 'game'; roomCode: string }
 
 export default function App() {
   const [ready, setReady] = useState(false)
@@ -23,11 +25,21 @@ export default function App() {
     )
   }
 
+  if (current.screen === 'game') {
+    return (
+      <GamePage
+        roomCode={current.roomCode}
+        onLeave={() => setCurrent({ screen: 'lobby' })}
+      />
+    )
+  }
+
   if (current.screen === 'waiting') {
     return (
       <WaitingRoomPage
         roomCode={current.roomCode}
         onLeave={() => setCurrent({ screen: 'lobby' })}
+        onGameStart={() => setCurrent({ screen: 'game', roomCode: current.roomCode })}
       />
     )
   }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { subscribeToPlayers, subscribeToMeta, setReady, updateRoomStatus, changePlayerColor } from '../firebase/roomService'
+import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { initPresence, startHeartbeat } from '../firebase/presenceService'
+import { startGame } from '../firebase/hostService'
 import type { Player, PlayerColor, RoomMeta } from '../engine/types'
 
 const COLOR_INFO: { value: PlayerColor; label: string; bg: string }[] = [
@@ -20,9 +21,10 @@ const COLOR_BG: Record<string, string> = Object.fromEntries(
 interface Props {
   roomCode: string
   onLeave: () => void
+  onGameStart: () => void
 }
 
-export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
+export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Props) {
   const [players, setPlayers] = useState<Record<string, Player>>({})
   const [meta, setMeta] = useState<RoomMeta | null>(null)
   const [myReady, setMyReady] = useState(false)
@@ -30,7 +32,10 @@ export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
 
   useEffect(() => {
     const unsubPlayers = subscribeToPlayers(roomCode, setPlayers)
-    const unsubMeta = subscribeToMeta(roomCode, setMeta)
+    const unsubMeta = subscribeToMeta(roomCode, (m) => {
+      setMeta(m)
+      if (m?.status === 'playing') onGameStart()
+    })
     const stopPresence = initPresence(roomCode)
     const stopHeartbeat = startHeartbeat(roomCode)
 
@@ -64,7 +69,8 @@ export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
   }
 
   async function handleStartGame() {
-    await updateRoomStatus(roomCode, 'playing')
+    if (!meta) return
+    await startGame(roomCode, players, meta.settings)
   }
 
   return (
