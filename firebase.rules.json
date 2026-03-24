@@ -16,7 +16,7 @@
 
         "game": {
           ".read": true,
-          ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+          ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val() || root.child('games').child($roomId).child('game/phase').val() === 'setup_place'",
 
           "phase":                  { ".read": true },
           "round":                  { ".read": true },
