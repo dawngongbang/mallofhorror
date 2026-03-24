@@ -38,7 +38,7 @@ export async function createRoom(
   const now = Date.now()
 
   const mergedSettings: GameSettings = {
-    playerCount: settings.playerCount ?? 4,
+    playerCount: settings.playerCount ?? 6,
     sealTime: settings.sealTime ?? DEFAULT_SETTINGS.sealTime,
     votingTime: settings.votingTime ?? DEFAULT_SETTINGS.votingTime,
     reactionTime: settings.reactionTime ?? DEFAULT_SETTINGS.reactionTime,

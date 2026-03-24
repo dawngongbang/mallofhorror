@@ -9,7 +9,8 @@ export function createInitialGameState(
   settings: GameSettings
 ): GameState {
   const playerIds = players.map(p => p.id)
-  const characterIds = CHARACTERS_BY_PLAYER_COUNT[settings.playerCount]
+  const actualCount = Math.max(3, Math.min(6, players.length))
+  const characterIds = CHARACTERS_BY_PLAYER_COUNT[actualCount]
 
   // 캐릭터 인스턴스 생성
   const characters: Record<string, Character> = {}

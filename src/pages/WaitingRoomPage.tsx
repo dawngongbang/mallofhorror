@@ -28,6 +28,8 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const [players, setPlayers] = useState<Record<string, Player>>({})
   const [meta, setMeta] = useState<RoomMeta | null>(null)
   const [myReady, setMyReady] = useState(false)
+  const [startError, setStartError] = useState('')
+  const [starting, setStarting] = useState(false)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -70,8 +72,15 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   }
 
   async function handleStartGame() {
-    if (!meta) return
-    await startGame(roomCode, players, meta.settings)
+    if (!meta || starting) return
+    setStarting(true)
+    setStartError('')
+    try {
+      await startGame(roomCode, players, meta.settings)
+    } catch (e: any) {
+      setStartError(e?.message ?? '게임 시작 실패')
+      setStarting(false)
+    }
   }
 
   return (
@@ -150,13 +159,14 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
 
         {/* 버튼 */}
         <div className="space-y-2">
+          {startError && <p className="text-red-400 text-xs text-center">{startError}</p>}
           {isHost ? (
             <button
               onClick={handleStartGame}
-              disabled={!allReady}
+              disabled={!allReady || starting}
               className="w-full bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
             >
-              {allReady ? '게임 시작' : playerList.length < 3 ? '3명 이상 필요' : '모두 준비 완료 시 시작 가능'}
+              {starting ? '게임 시작 중...' : allReady ? '게임 시작' : playerList.length < 3 ? '3명 이상 필요' : '모두 준비 완료 시 시작 가능'}
             </button>
           ) : (
             <button
