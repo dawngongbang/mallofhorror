@@ -61,10 +61,11 @@ export async function createRoom(
     itemIds: [],
   }
 
-  await set(ref(db, `games/${roomCode}`), {
-    meta,
-    players: { [uid]: player },
-  })
+  // 각 경로에 개별 쓰기 (Security Rules가 meta/players 각각에 적용됨)
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/meta`), meta),
+    set(ref(db, `games/${roomCode}/players/${uid}`), player),
+  ])
 
   return roomCode
 }
