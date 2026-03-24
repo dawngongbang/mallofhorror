@@ -15,6 +15,7 @@
         },
 
         "game": {
+          ".read": true,
           ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
 
           "phase":                  { ".read": true },
