@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
-import { subscribeToPlayers, subscribeToMeta, setReady, updateRoomStatus } from '../firebase/roomService'
+import { subscribeToPlayers, subscribeToMeta, setReady, updateRoomStatus, changePlayerColor } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { initPresence, startHeartbeat } from '../firebase/presenceService'
-import type { Player, RoomMeta } from '../engine/types'
+import type { Player, PlayerColor, RoomMeta } from '../engine/types'
 
-const COLOR_BG: Record<string, string> = {
-  red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
-  yellow: 'bg-yellow-400', purple: 'bg-purple-500', orange: 'bg-orange-500',
-}
+const COLOR_INFO: { value: PlayerColor; label: string; bg: string }[] = [
+  { value: 'red',    label: '빨강', bg: 'bg-red-500' },
+  { value: 'blue',   label: '파랑', bg: 'bg-blue-500' },
+  { value: 'green',  label: '초록', bg: 'bg-green-500' },
+  { value: 'yellow', label: '노랑', bg: 'bg-yellow-400' },
+  { value: 'purple', label: '보라', bg: 'bg-purple-500' },
+  { value: 'orange', label: '주황', bg: 'bg-orange-500' },
+]
+
+const COLOR_BG: Record<string, string> = Object.fromEntries(
+  COLOR_INFO.map(c => [c.value, c.bg])
+)
 
 interface Props {
   roomCode: string
@@ -36,7 +44,18 @@ export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
 
   const isHost = meta?.hostId === uid
   const playerList = Object.values(players)
-  const allReady = playerList.length >= 2 && playerList.every(p => p.isReady)
+  const myPlayer = uid ? players[uid] : undefined
+  const usedColors = playerList.map(p => p.color)
+  const allReady = playerList.length >= 3 && playerList.every(p => p.isReady)
+
+  async function handleColorChange(color: PlayerColor) {
+    if (!roomCode) return
+    try {
+      await changePlayerColor(roomCode, color)
+    } catch {
+      // 이미 사용 중인 색상 — 무시
+    }
+  }
 
   async function toggleReady() {
     const next = !myReady
@@ -96,6 +115,32 @@ export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
           </div>
         </div>
 
+        {/* 색상 선택 */}
+        <div className="bg-zinc-900 rounded-2xl p-5 mb-4">
+          <p className="text-xs text-zinc-500 mb-3">내 색상</p>
+          <div className="flex gap-2">
+            {COLOR_INFO.map(c => {
+              const isUsedByOther = usedColors.includes(c.value) && myPlayer?.color !== c.value
+              const isMine = myPlayer?.color === c.value
+              return (
+                <button
+                  key={c.value}
+                  onClick={() => !isUsedByOther && handleColorChange(c.value)}
+                  title={c.label}
+                  disabled={isUsedByOther}
+                  className={`w-9 h-9 rounded-full ${c.bg} transition-all ${
+                    isMine
+                      ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110'
+                      : isUsedByOther
+                      ? 'opacity-20 cursor-not-allowed'
+                      : 'opacity-60 hover:opacity-100'
+                  }`}
+                />
+              )
+            })}
+          </div>
+        </div>
+
         {/* 버튼 */}
         <div className="space-y-2">
           {isHost ? (
@@ -104,7 +149,7 @@ export default function WaitingRoomPage({ roomCode, onLeave }: Props) {
               disabled={!allReady}
               className="w-full bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
             >
-              {allReady ? '게임 시작' : '모두 준비 완료 시 시작 가능'}
+              {allReady ? '게임 시작' : playerList.length < 3 ? '3명 이상 필요' : '모두 준비 완료 시 시작 가능'}
             </button>
           ) : (
             <button

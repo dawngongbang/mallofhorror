@@ -1,15 +1,5 @@
 import { useState } from 'react'
 import { createRoom, joinRoom } from '../firebase/roomService'
-import type { PlayerColor } from '../engine/types'
-
-const COLORS: { value: PlayerColor; label: string; bg: string }[] = [
-  { value: 'red',    label: '빨강', bg: 'bg-red-500' },
-  { value: 'blue',   label: '파랑', bg: 'bg-blue-500' },
-  { value: 'green',  label: '초록', bg: 'bg-green-500' },
-  { value: 'yellow', label: '노랑', bg: 'bg-yellow-400' },
-  { value: 'purple', label: '보라', bg: 'bg-purple-500' },
-  { value: 'orange', label: '주황', bg: 'bg-orange-500' },
-]
 
 interface Props {
   onEnterRoom: (roomCode: string) => void
@@ -18,7 +8,6 @@ interface Props {
 export default function LobbyPage({ onEnterRoom }: Props) {
   const [tab, setTab] = useState<'create' | 'join'>('create')
   const [nickname, setNickname] = useState('')
-  const [color, setColor] = useState<PlayerColor>('red')
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,7 +16,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
     if (!nickname.trim()) { setError('닉네임을 입력해주세요.'); return }
     setLoading(true); setError('')
     try {
-      const code = await createRoom(nickname.trim(), color)
+      const code = await createRoom(nickname.trim())
       onEnterRoom(code)
     } catch (e: any) {
       setError(e.message)
@@ -41,7 +30,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
     if (!joinCode.trim()) { setError('방 코드를 입력해주세요.'); return }
     setLoading(true); setError('')
     try {
-      await joinRoom(joinCode.trim().toUpperCase(), nickname.trim(), color)
+      await joinRoom(joinCode.trim().toUpperCase(), nickname.trim())
       onEnterRoom(joinCode.trim().toUpperCase())
     } catch (e: any) {
       setError(e.message)
@@ -84,21 +73,6 @@ export default function LobbyPage({ onEnterRoom }: Props) {
           maxLength={10}
           className="w-full bg-zinc-800 text-white rounded-lg px-4 py-2.5 text-sm mb-4 outline-none focus:ring-2 focus:ring-red-500 placeholder:text-zinc-600"
         />
-
-        {/* 색상 선택 */}
-        <label className="block text-xs text-zinc-400 mb-2">색상</label>
-        <div className="flex gap-2 mb-4">
-          {COLORS.map(c => (
-            <button
-              key={c.value}
-              onClick={() => setColor(c.value)}
-              title={c.label}
-              className={`w-8 h-8 rounded-full ${c.bg} transition-all ${
-                color === c.value ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110' : 'opacity-60 hover:opacity-100'
-              }`}
-            />
-          ))}
-        </div>
 
         {/* 방 코드 (입장 탭) */}
         {tab === 'join' && (

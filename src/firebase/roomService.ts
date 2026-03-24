@@ -12,6 +12,12 @@ import { getCurrentUid } from './auth'
 import type { RoomMeta, Player, GameSettings, PlayerColor } from '../engine/types'
 import { DEFAULT_SETTINGS } from '../engine/constants'
 
+const ALL_COLORS: PlayerColor[] = ['red', 'blue', 'green', 'yellow', 'purple', 'orange']
+
+function pickAvailableColor(usedColors: PlayerColor[]): PlayerColor {
+  return ALL_COLORS.find(c => !usedColors.includes(c)) ?? 'red'
+}
+
 // ── 방 코드 생성 ──────────────────────────────────────────────
 
 function generateRoomCode(): string {
@@ -23,7 +29,6 @@ function generateRoomCode(): string {
 
 export async function createRoom(
   nickname: string,
-  color: PlayerColor,
   settings: Partial<GameSettings> = {}
 ): Promise<string> {
   const uid = getCurrentUid()
@@ -53,7 +58,7 @@ export async function createRoom(
   const player: Player = {
     id: uid,
     nickname,
-    color,
+    color: 'red',  // 방장은 기본 빨강, 대기실에서 변경 가능
     isReady: false,
     isConnected: true,
     lastSeen: now,
@@ -75,7 +80,6 @@ export async function createRoom(
 export async function joinRoom(
   roomCode: string,
   nickname: string,
-  color: PlayerColor
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) throw new Error('로그인이 필요합니다.')
@@ -92,11 +96,8 @@ export async function joinRoom(
 
   if (playerCount >= meta.settings.playerCount) throw new Error('방이 가득 찼습니다.')
 
-  // 색상 중복 체크
-  if (players) {
-    const usedColors = Object.values(players).map(p => p.color)
-    if (usedColors.includes(color)) throw new Error('이미 사용 중인 색상입니다.')
-  }
+  const usedColors = players ? Object.values(players).map(p => p.color) : []
+  const color = pickAvailableColor(usedColors)
 
   const player: Player = {
     id: uid,
@@ -110,6 +111,28 @@ export async function joinRoom(
   }
 
   await set(ref(db, `games/${roomCode}/players/${uid}`), player)
+}
+
+// ── 색상 변경 ─────────────────────────────────────────────
+
+export async function changePlayerColor(
+  roomCode: string,
+  color: PlayerColor,
+): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) throw new Error('로그인이 필요합니다.')
+
+  // 중복 체크
+  const playersSnap = await get(ref(db, `games/${roomCode}/players`))
+  const players = playersSnap.val() as Record<string, Player> | null
+  if (players) {
+    const conflict = Object.entries(players).find(
+      ([id, p]) => id !== uid && p.color === color
+    )
+    if (conflict) throw new Error('이미 사용 중인 색상입니다.')
+  }
+
+  await update(ref(db, `games/${roomCode}/players/${uid}`), { color })
 }
 
 // ── 준비 상태 토글 ────────────────────────────────────────────
