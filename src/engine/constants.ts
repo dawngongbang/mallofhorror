@@ -198,7 +198,9 @@ export const TOTAL_ITEM_COUNT = Object.values(ITEM_CONFIGS)
 export const DEFAULT_SETTINGS = {
   sealTime: 60,
   votingTime: 60,
+  reactionTime: 10,
   parkingMode: 'normal' as const,
+  voteReactionTiming: 'before_vote' as const,
 }
 
 // 투표 재투표 최대 횟수 (2회 동률 후 전체 투표로 전환)

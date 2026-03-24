@@ -61,6 +61,7 @@ export function createVoteState(
     status: Object.fromEntries(eligibleVoters.map(id => [id, false])),
     eligibleVoters,
     candidates,
+    bonusVoteWeights: {},
   }
 }
 
@@ -77,8 +78,9 @@ export function calculateVoteResult(
   // 투표 집계 (투표권 가중치 반영)
   for (const [voterId, targetId] of Object.entries(voteState.votes)) {
     if (tally[targetId] === undefined) continue
-    const voteWeight = getVoteWeight(voterId, voteState.zone, state)
-    tally[targetId] += voteWeight
+    const base = getVoteWeight(voterId, voteState.zone, state)
+    const bonus = voteState.bonusVoteWeights[voterId] ?? 0
+    tally[targetId] += base + bonus
   }
 
   const maxVotes = Math.max(...Object.values(tally))

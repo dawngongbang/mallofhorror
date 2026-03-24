@@ -1,4 +1,4 @@
-import type { GameState, ZoneName, CharacterId } from '../types'
+import type { GameState, ZoneName } from '../types'
 import { ZONE_CONFIGS } from '../constants'
 
 // 테스트용 최소 게임 상태 생성
@@ -15,6 +15,7 @@ export function createTestState(): GameState {
     phaseStartedAt: 0,
     playerOrder: ['p1', 'p2', 'p3'],
     sheriffIndex: 0,
+    isRealSheriff: false,
     nextSheriffPlayerId: null,
     characters: {
       p1_belle:    { id: 'p1_belle',    playerId: 'p1', characterId: 'belle',    zone: 'corridor' as ZoneName, isAlive: true },
@@ -40,6 +41,7 @@ export function createTestState(): GameState {
     currentVote: null,
     itemDeck: [],
     itemSearchPreview: null,
+    cardReactionWindow: null,
     winners: [],
     finalScores: {},
   }

@@ -1,0 +1,80 @@
+{
+  "rules": {
+    "games": {
+      "$roomId": {
+        "meta": {
+          ".read": true,
+          ".write": "auth != null && (!data.exists() || auth.uid === data.child('hostId').val())"
+        },
+
+        "players": {
+          ".read": true,
+          "$playerId": {
+            ".write": "auth.uid === $playerId"
+          }
+        },
+
+        "game": {
+          "phase":                  { ".read": true },
+          "round":                  { ".read": true },
+          "phaseDeadline":          { ".read": true },
+          "phaseStartedAt":         { ".read": true },
+          "playerOrder":            { ".read": true },
+          "sheriffIndex":           { ".read": true },
+          "isRealSheriff":          { ".read": true },
+          "nextSheriffPlayerId":    { ".read": true },
+          "characters":             { ".read": true },
+          "zones":                  { ".read": true },
+          "setupPlacementOrder":    { ".read": true },
+          "setupDiceRoll":          { ".read": true },
+          "characterDeclarations":  { ".read": true },
+          "declarationOrder":       { ".read": true },
+          "destinationStatus":      { ".read": true },
+          "resolvedMoves":          { ".read": true },
+          "currentEventZoneIndex":  { ".read": true },
+          "currentVote":            { ".read": true },
+          "itemSearchPreview":      { ".read": true },
+          "cardReactionWindow":     { ".read": true },
+          "winners":                { ".read": true },
+          "finalScores":            { ".read": true },
+
+          "lastDiceRoll": {
+            ".read": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()"
+          },
+
+          "sealedDestinations": {
+            "$playerId": {
+              ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+              ".write": "auth.uid === $playerId"
+            }
+          },
+
+          "pendingItemActions": {
+            "$playerId": {
+              ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+              ".write": "auth.uid === $playerId"
+            }
+          },
+
+          "$other": {
+            ".write": "auth.uid === root.child('games').child($roomId).child('meta/hostId').val()"
+          }
+        },
+
+        "private": {
+          "$playerId": {
+            ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+            ".write": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()"
+          }
+        },
+
+        "chat": {
+          ".read": true,
+          "$messageId": {
+            ".write": "auth != null && !data.exists()"
+          }
+        }
+      }
+    }
+  }
+}

@@ -130,6 +130,7 @@ describe('calculateVoteResult', () => {
       status: { p1: true, p2: true },
       eligibleVoters: ['p1', 'p2'],
       candidates: ['p1', 'p2'],
+      bonusVoteWeights: {},
     }
 
     const result = calculateVoteResult(voteState, state)
@@ -150,10 +151,63 @@ describe('calculateVoteResult', () => {
       status: { p1: true, p2: true },
       eligibleVoters: ['p1', 'p2'],
       candidates: ['p1', 'p2'],
+      bonusVoteWeights: {},
     }
 
     const result = calculateVoteResult(voteState, state)
     expect(result.winner).toBeNull()
     expect(result.tieBreak).toBe('revote')
+  })
+})
+
+import { checkRealSheriff, resolveNextSheriff } from '../phase'
+
+describe('checkRealSheriff', () => {
+  it('보안관이 보안실에 캐릭터 보유 → 진짜 보안관', () => {
+    const state = createTestState()
+    // sheriffIndex=0 → p1이 보안관
+    addCharacterToZone(state, 'p1_belle', 'security')
+
+    expect(checkRealSheriff(state)).toBe(true)
+  })
+
+  it('보안관이 보안실에 캐릭터 없음 → 임시 보안관', () => {
+    const state = createTestState()
+    addCharacterToZone(state, 'p2_belle', 'security')  // p2 캐릭터만 있음
+
+    expect(checkRealSheriff(state)).toBe(false)
+  })
+
+  it('보안실 비어있으면 임시 보안관', () => {
+    const state = createTestState()
+    expect(checkRealSheriff(state)).toBe(false)
+  })
+})
+
+describe('resolveNextSheriff', () => {
+  it('새 보안관이 playerOrder 맨 앞으로 이동', () => {
+    const state = createTestState()
+    // playerOrder: ['p1','p2','p3'], 현재 보안관 p1
+    state.nextSheriffPlayerId = 'p3'
+
+    const result = resolveNextSheriff(state)
+    expect(result.playerOrder).toEqual(['p3', 'p1', 'p2'])
+    expect(result.sheriffIndex).toBe(0)
+    expect(result.nextSheriffPlayerId).toBeNull()
+  })
+
+  it('nextSheriffPlayerId 없으면 변경 없음', () => {
+    const state = createTestState()
+    const result = resolveNextSheriff(state)
+    expect(result.playerOrder).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  it('이미 1번이면 순서 그대로', () => {
+    const state = createTestState()
+    state.nextSheriffPlayerId = 'p1'
+
+    const result = resolveNextSheriff(state)
+    expect(result.playerOrder).toEqual(['p1', 'p2', 'p3'])
+    expect(result.sheriffIndex).toBe(0)
   })
 })

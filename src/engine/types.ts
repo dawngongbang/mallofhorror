@@ -120,8 +120,8 @@ export interface ResolvedMove {
 
 export interface DiceRollResult {
   dice: [number, number, number, number]
-  // 주사위 눈 → 구역번호 → 해당 구역에 좀비 배치
-  // 이동 페이즈 이후에 공개됨
+  zombiesByZone: Partial<Record<ZoneName, number>>
+  // 이동 페이즈 이후에 공개됨 (진짜 보안관은 혼자 미리 확인 가능)
 }
 
 // ── 투표 ────────────────────────────────────────────────────
@@ -136,6 +136,7 @@ export interface VoteState {
   status: Record<string, boolean>      // playerId → 투표 완료 여부
   eligibleVoters: string[]             // 이번 투표 참여 가능 플레이어 ID
   candidates: string[]                 // 득표 대상 플레이어 ID
+  bonusVoteWeights: Record<string, number>  // playerId → 협박카드 등으로 추가된 투표권
 }
 
 export interface VoteResult {
@@ -182,6 +183,7 @@ export interface GameState {
   // 플레이어 순서 (게임 내내 유지, 인덱스로 보안관 결정)
   playerOrder: string[]       // playerId 배열
   sheriffIndex: number        // playerOrder에서 현재 보안관 인덱스
+  isRealSheriff: boolean      // true: 진짜 보안관(주사위 비공개 가능), false: 임시 보안관(항상 공개)
   nextSheriffPlayerId: string | null  // 보안실 투표로 결정된 다음 보안관
 
   // 보드
@@ -208,9 +210,37 @@ export interface GameState {
   itemDeck: Item[]                 // 남은 아이템 덱
   itemSearchPreview: string[] | null  // 탐색자에게 보이는 아이템 3개 instanceId
 
+  // 카드 반응 창 (voteReactionTiming 설정에 따라 활성화)
+  cardReactionWindow: CardReactionWindow | null
+
   // 결과
   winners: string[]
   finalScores: Record<string, number>
+}
+
+// ── 카드 반응 창 ──────────────────────────────────────────────
+// sprint / hidden_card를 사용할 수 있는 대기 창
+//
+// [before_vote] 투표 시작 직전 — 모든 후보 플레이어가 동시에 대기
+//   카드 사용 시: 해당 플레이어가 후보에서 제외된 채 투표 진행
+//   (sprint → 다른 구역으로 이동, hidden → 제자리 유지)
+//
+// [after_vote]  투표 결과 확정 후 — 패배자 1인만 대기
+//   카드 사용 시: 사망 취소 + 재투표
+
+export interface CardReactionWindow {
+  zone: ZoneName
+  timing: 'before_vote' | 'after_vote'
+  deadline: number          // 타임아웃 타임스탬프
+
+  // before_vote: 후보 플레이어 전원 대기, 사용 여부 개별 기록
+  candidatePlayers: string[]              // 후보 플레이어 ID 목록
+  usedCards: Record<string, 'sprint' | 'hidden_card'>  // playerId → 사용한 카드
+  escaped: string[]                       // 카드로 후보에서 빠진 플레이어 ID
+
+  // after_vote: 패배자 1인만 대기
+  loserPlayerId: string | null
+  reactionUsed: boolean                   // 패배자가 카드 사용했는지
 }
 
 // ── 게임 설정 ────────────────────────────────────────────────
@@ -219,9 +249,14 @@ export interface GameSettings {
   playerCount: number       // 3~6
   sealTime: number          // 목적지 봉인 제한 시간 (초, 기본 60)
   votingTime: number        // 투표 제한 시간 (초, 기본 60)
+  reactionTime: number      // 카드 반응 창 대기 시간 (초, 기본 10)
   parkingMode: 'normal' | 'hardcore'
   // normal:   주차장도 투표로 1명 사망
   // hardcore: 주차장에서 좀비 수만큼 사망
+  voteReactionTiming: 'before_vote' | 'after_vote' | 'disabled'
+  // before_vote: 투표 시작 전 도망/숨기 가능 → 후보에서 제외
+  // after_vote:  투표 결과 후 카드 사용 가능 → 사망 취소 + 재투표
+  // disabled:    sprint/hidden은 이동 페이즈 전용으로만 사용
 }
 
 // ── 방 메타 ──────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import type { GameState, GameSettings, Player, ZoneName, Character, CharacterId } from './types'
-import { CHARACTERS_BY_PLAYER_COUNT, ZONE_CONFIGS, EVENT_ZONE_ORDER } from './constants'
+import { CHARACTERS_BY_PLAYER_COUNT, ZONE_CONFIGS, DICE_TO_ZONE } from './constants'
 import { createItemDeck, shuffle, dealItems } from './items'
-import { rollZombieDice } from './dice'
+import { rollZombieDice, rollSetupDice, isZoneFull } from './dice'
 
 // 게임 초기 상태 생성
 export function createInitialGameState(
@@ -56,6 +56,7 @@ export function createInitialGameState(
 
     playerOrder: playerIds,
     sheriffIndex,
+    isRealSheriff: false,  // 초기에는 임시 보안관
     nextSheriffPlayerId: null,
 
     characters,
@@ -76,6 +77,8 @@ export function createInitialGameState(
 
     itemDeck: remainingDeck,
     itemSearchPreview: null,
+
+    cardReactionWindow: null,
 
     winners: [],
     finalScores: {},
@@ -149,6 +152,32 @@ export function placeCharacter(
     zones,
     setupPlacementOrder: state.setupPlacementOrder.slice(1),  // 다음 배치로
     setupDiceRoll: null,
+  }
+}
+
+// 초기 배치: 주사위 2개 굴려 배치 옵션 계산
+// 반환: 플레이어가 선택 가능한 구역 목록
+//   - 두 주사위 구역 중 가득 차지 않은 구역 목록
+//   - 둘 다 가득 찼으면 → 모든 구역 자유 선택
+export function rollAndGetPlacementOptions(state: GameState): {
+  state: GameState
+  options: ZoneName[]
+} {
+  const roll = rollSetupDice()
+  const zone1 = DICE_TO_ZONE[roll[0]]
+  const zone2 = DICE_TO_ZONE[roll[1]]
+
+  const candidates = zone1 === zone2 ? [zone1] : [zone1, zone2]
+  const available = candidates.filter(z => !isZoneFull(z, state))
+
+  // 둘 다 가득 찼으면 모든 구역 자유 선택
+  const options: ZoneName[] = available.length > 0
+    ? available
+    : (Object.keys(state.zones) as ZoneName[]).filter(z => !isZoneFull(z, state))
+
+  return {
+    state: { ...state, setupDiceRoll: roll },
+    options,
   }
 }
 

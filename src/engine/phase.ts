@@ -1,9 +1,8 @@
 import type { GameState, GamePhase, GameSettings, ZoneName } from './types'
 import { EVENT_ZONE_ORDER } from './constants'
-import { isUnderAttack } from './combat'
 
 // 현재 상태에서 다음 페이즈 계산
-export function getNextPhase(state: GameState, settings: GameSettings): GamePhase {
+export function getNextPhase(state: GameState, _settings: GameSettings): GamePhase {
   switch (state.phase) {
     case 'waiting':
       return 'setup_place'
@@ -105,17 +104,43 @@ export function getSheriffPlayerId(state: GameState): string {
   return state.playerOrder[state.sheriffIndex]
 }
 
-// 다음 라운드 보안관 인덱스 계산
-// nextSheriffPlayerId가 있으면 그 플레이어로, 없으면 유지
+// 보안관이 현재 보안실에 캐릭터를 보유 중인지 확인
+// → true면 진짜 보안관 (주사위 비공개 가능)
+// → false면 임시 보안관 (주사위 항상 공개)
+export function checkRealSheriff(state: GameState): boolean {
+  const sheriffId = getSheriffPlayerId(state)
+  return state.zones.security.characterIds.some(charId => {
+    const char = state.characters[charId]
+    return char?.isAlive && char.playerId === sheriffId
+  })
+}
+
+// 라운드 시작 시 진짜/임시 보안관 여부 갱신
+export function updateSheriffStatus(state: GameState): GameState {
+  return { ...state, isRealSheriff: checkRealSheriff(state) }
+}
+
+// 다음 라운드 보안관 교체
+// nextSheriffPlayerId가 있으면 그 플레이어로 교체하고 playerOrder 재편
+// 기획서: "새 보안관이 1번이 되도록 순서 재편, 기존 상대 순서 유지"
 export function resolveNextSheriff(state: GameState): GameState {
   if (!state.nextSheriffPlayerId) return state
 
-  const newIndex = state.playerOrder.indexOf(state.nextSheriffPlayerId)
+  const newSheriffId = state.nextSheriffPlayerId
+  const oldOrder = state.playerOrder
+  const newIndex = oldOrder.indexOf(newSheriffId)
   if (newIndex === -1) return state
+
+  // 새 보안관을 맨 앞으로, 나머지는 기존 상대 순서 유지
+  const newOrder = [
+    ...oldOrder.slice(newIndex),
+    ...oldOrder.slice(0, newIndex),
+  ]
 
   return {
     ...state,
-    sheriffIndex: newIndex,
+    playerOrder: newOrder,
+    sheriffIndex: 0,
     nextSheriffPlayerId: null,
   }
 }

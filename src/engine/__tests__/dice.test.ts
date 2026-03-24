@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcBonusZombies, applyBonusZombies, isZoneFull } from '../dice'
+import { calcBonusZombies, isZoneFull } from '../dice'
 import { createTestState, addCharacterToZone } from './helpers'
 
 describe('calcBonusZombies', () => {

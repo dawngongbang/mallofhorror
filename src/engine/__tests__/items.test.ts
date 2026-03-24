@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createItemDeck, shuffle, dealItems, TOTAL_ITEM_COUNT } from '../items'
-import { TOTAL_ITEM_COUNT as CONST_TOTAL } from '../constants'
+import { createItemDeck, shuffle, dealItems } from '../items'
 
 describe('createItemDeck', () => {
   it('전체 21장 생성', () => {
