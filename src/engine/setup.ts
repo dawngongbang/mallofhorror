@@ -169,22 +169,20 @@ export function rollAndGetPlacementOptions(state: GameState): {
   }
 }
 
-// 첫 라운드 시작 전 주사위 굴리기 (좀비만 배치, 이동 없음)
+// 첫 라운드 시작 전 주사위 굴리기 — 결과 공개만 (좀비 배치는 dice_reveal 이후)
 export function startFirstRound(state: GameState): GameState {
   const roll = rollZombieDice()
-  const zones = { ...state.zones }
-
-  for (const [zoneName, count] of Object.entries(roll.zombiesByZone)) {
-    const zone = zoneName as ZoneName
-    zones[zone] = { ...zones[zone], zombies: zones[zone].zombies + (count ?? 0) }
-  }
-
+  // 보안관부터 시작하는 선언 순서 사전 설정
+  const sheriffFirst = [
+    ...state.playerOrder.slice(state.sheriffIndex),
+    ...state.playerOrder.slice(0, state.sheriffIndex),
+  ]
   return {
     ...state,
-    phase: 'character_select',
+    phase: 'dice_reveal',
     round: 1,
-    zones,
     lastDiceRoll: roll,
+    declarationOrder: sheriffFirst,
     currentEventZoneIndex: 0,
   }
 }

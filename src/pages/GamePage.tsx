@@ -5,13 +5,13 @@ import {
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
-import { hostRollDice, hostResolveMovement, hostResolveVote, hostEndRound } from '../firebase/hostService'
+import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound } from '../firebase/hostService'
 import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase } from '../engine/event'
 import { calculateVoteResult } from '../engine/combat'
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
-import { isZoneFull } from '../engine/dice'
+import { isZoneFull, calcBonusZombies } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
 
 const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
@@ -22,8 +22,9 @@ const COLOR_BG: Record<string, string> = {
 }
 
 const PHASE_LABEL: Record<string, string> = {
-  setup_place: '초기 배치', roll_dice: '주사위', character_select: '캐릭터 선언',
-  destination_seal: '목적지 선택', destination_reveal: '공개', move_execute: '이동',
+  setup_place: '초기 배치', roll_dice: '주사위', dice_reveal: '주사위 공개',
+  character_select: '캐릭터 선언', destination_seal: '목적지 선택',
+  destination_reveal: '공개', move_execute: '이동',
   event: '이벤트', voting: '투표', check_win: '승리 체크', finished: '종료',
 }
 
@@ -90,14 +91,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       if (!game || processingRef.current) return
       processingRef.current = true
       try {
-        // character_select: 전원 선언 완료 → destination_seal
+        // character_select: 전원 선언 완료 → destination_seal (declarationOrder는 이미 설정됨)
         if (game.phase === 'character_select') {
           const declared = Object.keys(game.characterDeclarations)
           if (declared.length >= game.playerOrder.length) {
-            const declarationOrder = Object.values(game.characterDeclarations)
-              .sort((a, b) => a.declaredAt - b.declaredAt)
-              .map(d => d.playerId)
-            await patchGameState(roomCode, { phase: 'destination_seal', declarationOrder })
+            await patchGameState(roomCode, { phase: 'destination_seal' })
           }
         }
 
@@ -158,6 +156,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     runHostStep()
   }, [game, isHost, roomCode])
 
+  // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
+  useEffect(() => {
+    if (!isHost || !game || game.phase !== 'dice_reveal') return
+    const capturedGame = game
+    const timer = setTimeout(async () => {
+      await hostApplyDiceRoll(roomCode, capturedGame)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [game?.phase, isHost, roomCode])
+
   if (!game) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -207,6 +215,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       setupDiceRoll: null,
       ...(next.phase !== game.phase ? {
         phase: next.phase, round: next.round, lastDiceRoll: next.lastDiceRoll,
+        declarationOrder: next.declarationOrder,
         currentEventZoneIndex: 0,
       } : {}),
     })
@@ -228,13 +237,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     ? Object.values(game.characters).filter(c => c.playerId === uid && c.isAlive)
     : []
 
+  // 선언 순서상 현재 차례인 플레이어 (보안관부터 순서대로)
+  const currentDeclarerId = game?.declarationOrder.find(pid => !game.characterDeclarations[pid]) ?? null
+
   async function handleDeclareCharacter(charInstanceId: string) {
     if (!uid || myDeclaredCharId || actionLoading) return
+    if (currentDeclarerId !== uid) return  // 내 차례가 아님
     setActionLoading(true)
     await declareCharacter(roomCode, {
       playerId: uid,
       characterId: charInstanceId,
-      order: Object.keys(game!.characterDeclarations).length,
+      order: game!.declarationOrder.indexOf(uid),
       declaredAt: Date.now(),
     })
     setActionLoading(false)
@@ -396,6 +409,45 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
+      // ── 주사위 결과 공개 ─────────────────────────────────────
+      case 'dice_reveal': {
+        const roll = game!.lastDiceRoll
+        if (!roll) return <p className="text-zinc-400 text-sm">주사위 결과 로딩 중...</p>
+        const { belleZone, mostCrowdedZone } = calcBonusZombies(game!)
+        return (
+          <div className="text-center">
+            <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과</p>
+            <div className="flex justify-center gap-2 mb-3">
+              {roll.dice.map((d, i) => (
+                <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-center gap-2 mb-3 text-sm">
+              {Object.entries(roll.zombiesByZone).map(([zone, count]) => (
+                <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg">
+                  <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
+                  <span className="text-red-400 ml-1">+{count}🧟</span>
+                </span>
+              ))}
+            </div>
+            <div className="text-xs space-y-1 text-zinc-400">
+              {mostCrowdedZone && (
+                <p>👥 사람 가장 많은 곳: <span className="text-white font-bold">{ZONE_CONFIGS[mostCrowdedZone].displayName}</span> → 좀비 +1</p>
+              )}
+              {belleZone && (
+                <p>💃 미녀 가장 많은 곳: <span className="text-white font-bold">{ZONE_CONFIGS[belleZone].displayName}</span> → 좀비 +1</p>
+              )}
+              {!mostCrowdedZone && !belleZone && (
+                <p className="text-zinc-600">보너스 좀비 없음 (동률)</p>
+              )}
+            </div>
+            <p className="text-zinc-600 text-xs mt-3">잠시 후 좀비가 배치됩니다...</p>
+          </div>
+        )
+      }
+
       // ── 주사위 (2라운드~) ────────────────────────────────────
       case 'roll_dice': {
         if (!isHost) {
@@ -413,39 +465,72 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
-      // ── 캐릭터 선언 ─────────────────────────────────────────
+      // ── 캐릭터 선언 (보안관부터 순서대로) ────────────────────
       case 'character_select': {
         const declaredCount = Object.keys(game!.characterDeclarations).length
         const total = game!.playerOrder.length
 
-        if (myDeclaredCharId) {
-          const charConfig = CHARACTER_CONFIGS[game!.characters[myDeclaredCharId]?.characterId]
-          return (
-            <div>
-              <p className="text-green-400 text-sm font-bold mb-1">
-                ✓ {charConfig?.name} 선언 완료
-              </p>
-              <p className="text-zinc-500 text-xs">{declaredCount} / {total}명 선언 완료</p>
-            </div>
-          )
-        }
-
         return (
           <div>
-            <p className="text-white text-sm font-bold mb-2">이동할 캐릭터 선택</p>
-            <div className="flex gap-2 flex-wrap">
-              {myAliveChars.map(char => {
-                const charConfig = CHARACTER_CONFIGS[char.characterId]
-                return (
-                  <button key={char.id} onClick={() => handleDeclareCharacter(char.id)}
-                    disabled={actionLoading}
-                    className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white text-sm px-4 py-2 rounded-xl transition-colors">
-                    {charConfig?.name ?? char.characterId}
-                    <span className="text-zinc-400 text-xs ml-1">({ZONE_CONFIGS[char.zone].displayName})</span>
-                  </button>
-                )
-              })}
-            </div>
+            {/* 선언 완료된 목록 */}
+            {declaredCount > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-zinc-500 mb-1">선언 완료</p>
+                <div className="flex flex-wrap gap-2">
+                  {game!.declarationOrder
+                    .filter(pid => game!.characterDeclarations[pid])
+                    .map(pid => {
+                      const decl = game!.characterDeclarations[pid]
+                      const charConfig = CHARACTER_CONFIGS[game!.characters[decl.characterId]?.characterId]
+                      const player = players[pid]
+                      return (
+                        <div key={pid} className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-2 py-1">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${COLOR_BG[player?.color ?? ''] ?? 'bg-zinc-600'}`} />
+                          <span className="text-xs text-zinc-400">{player?.nickname}</span>
+                          <span className="text-xs text-white font-medium">→ {charConfig?.name}</span>
+                          <span className="text-xs text-zinc-500">({ZONE_CONFIGS[game!.characters[decl.characterId]?.zone]?.displayName})</span>
+                        </div>
+                      )
+                    })
+                  }
+                </div>
+              </div>
+            )}
+
+            {/* 내가 이미 선언함 */}
+            {myDeclaredCharId && currentDeclarerId && (
+              <p className="text-zinc-400 text-sm">
+                <span className="text-white font-bold">{players[currentDeclarerId]?.nickname}</span>님이 선택 중...
+              </p>
+            )}
+
+            {/* 내 차례 */}
+            {!myDeclaredCharId && currentDeclarerId === uid && (
+              <div>
+                <p className="text-white text-sm font-bold mb-2">내 차례 — 이동할 캐릭터 선택</p>
+                <div className="flex gap-2 flex-wrap">
+                  {myAliveChars.map(char => {
+                    const charConfig = CHARACTER_CONFIGS[char.characterId]
+                    return (
+                      <button key={char.id} onClick={() => handleDeclareCharacter(char.id)}
+                        disabled={actionLoading}
+                        className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white text-sm px-4 py-2 rounded-xl transition-colors">
+                        {charConfig?.name ?? char.characterId}
+                        <span className="text-zinc-400 text-xs ml-1">({ZONE_CONFIGS[char.zone].displayName})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 다른 사람 차례 (나는 아직 선언 안 함 — 순서 기다리는 중) */}
+            {!myDeclaredCharId && currentDeclarerId !== uid && (
+              <p className="text-zinc-400 text-sm">
+                <span className="text-white font-bold">{players[currentDeclarerId ?? '']?.nickname}</span>님이 선택 중... (내 차례 대기)
+              </p>
+            )}
+
             <p className="text-zinc-600 text-xs mt-2">{declaredCount} / {total}명 선언 완료</p>
           </div>
         )

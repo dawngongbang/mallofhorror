@@ -156,7 +156,8 @@ export type GamePhase =
   | 'waiting'             // 대기실
   | 'setup_place'         // 초기 캐릭터 배치 (주사위 2개씩)
   | 'roll_dice'           // 보안관이 주사위 4개 굴림
-  | 'character_select'    // 이동①: 캐릭터 공개 선언
+  | 'dice_reveal'         // 주사위 결과 공개 (3초 대기, 좀비 배치 전)
+  | 'character_select'    // 이동①: 캐릭터 공개 선언 (보안관부터 순서대로)
   | 'destination_seal'    // 이동②: 목적지 봉인
   | 'destination_reveal'  // 이동③: 동시 공개
   | 'move_execute'        // 이동④: 순서대로 이동

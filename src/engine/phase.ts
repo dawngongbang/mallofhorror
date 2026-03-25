@@ -12,6 +12,9 @@ export function getNextPhase(state: GameState, _settings: GameSettings): GamePha
       return state.setupPlacementOrder.length === 0 ? 'roll_dice' : 'setup_place'
 
     case 'roll_dice':
+      return 'dice_reveal'
+
+    case 'dice_reveal':
       return 'character_select'
 
     case 'character_select':
@@ -85,10 +88,15 @@ export function isEventPhaseComplete(state: GameState): boolean {
 
 // 라운드 시작 시 페이즈 데이터 초기화
 export function initRoundState(state: GameState): GameState {
+  // 보안관부터 시작하는 선언 순서 사전 설정
+  const sheriffFirst = [
+    ...state.playerOrder.slice(state.sheriffIndex),
+    ...state.playerOrder.slice(0, state.sheriffIndex),
+  ]
   return {
     ...state,
     characterDeclarations: {},
-    declarationOrder: [],
+    declarationOrder: sheriffFirst,
     sealedDestinations: {},
     destinationStatus: {},
     resolvedMoves: [],

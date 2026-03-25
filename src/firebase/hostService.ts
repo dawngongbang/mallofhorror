@@ -39,14 +39,30 @@ export async function hostRollDice(
   state: GameState
 ): Promise<GameState> {
   const roll = rollZombieDice()
-  let next = applyZombiePlacement(state, roll)
-  next = applyBonusZombies(next)
-  next = { ...next, phase: 'character_select' }
+  const next = { ...state, lastDiceRoll: roll, phase: 'dice_reveal' as const }
 
   await patchGameState(roomCode, {
-    lastDiceRoll: next.lastDiceRoll,
+    lastDiceRoll: roll,
+    phase: 'dice_reveal',
+  })
+
+  return next
+}
+
+// ── 주사위 결과 적용 — 좀비 배치 + character_select 전환 (호스트 전용) ──
+
+export async function hostApplyDiceRoll(
+  roomCode: string,
+  state: GameState
+): Promise<GameState> {
+  if (!state.lastDiceRoll) return state
+  let next = applyZombiePlacement(state, state.lastDiceRoll)
+  next = applyBonusZombies(next)
+  next = { ...next, phase: 'character_select' as const }
+
+  await patchGameState(roomCode, {
     zones: next.zones,
-    phase: next.phase,
+    phase: 'character_select',
   })
 
   return next
