@@ -60,10 +60,14 @@ function normalizeGame(g: GameState): GameState {
 
   // currentVote 내부 배열 정규화
   const cv = g.currentVote
+  const toArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v as string[]
+    : v && typeof v === 'object' ? Object.values(v) as string[]
+    : []
   const normalizedVote = cv ? {
     ...cv,
-    eligibleVoters: cv.eligibleVoters ?? [],
-    candidates:     cv.candidates     ?? [],
+    eligibleVoters: toArray(cv.eligibleVoters),
+    candidates:     toArray(cv.candidates),
     votes:          cv.votes          ?? {},
     status:         cv.status         ?? {},
     bonusVoteWeights: cv.bonusVoteWeights ?? {},
@@ -682,8 +686,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 <span>🛡 방어 <strong className="text-white">{defense}</strong></span>
               )}
             </div>
-            {zoneState.zombies === 0 && aliveCount === 0 ? (
-              <p className="text-zinc-500 text-sm">사람도 좀비도 없습니다.</p>
+            {aliveCount === 0 ? (
+              zoneState.zombies === 0
+                ? <p className="text-zinc-500 text-sm">사람도 좀비도 없습니다.</p>
+                : <p className="text-zinc-500 text-sm">사람이 없습니다.</p>
             ) : zoneState.zombies === 0 ? (
               survivorEvent === 'sheriff' ? (
                 <p className="text-yellow-400 font-bold">👮 보안관 선출 투표를 진행합니다</p>
@@ -694,10 +700,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               )
             ) : attacked ? (
               <p className="text-red-400 font-bold text-base">💀 좀비의 공세를 이겨내지 못하였습니다!</p>
-            ) : aliveCount > 0 ? (
-              <p className="text-green-400 font-bold text-base">🛡 좀비 방어에 성공하였습니다!</p>
             ) : (
-              <p className="text-zinc-500 text-sm">사람이 없습니다.</p>
+              <p className="text-green-400 font-bold text-base">🛡 좀비 방어에 성공하였습니다!</p>
             )}
           </div>
         )
