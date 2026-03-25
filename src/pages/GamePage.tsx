@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   subscribeToGame, declareCharacter, sealDestination,
-  submitVote, patchGameState, subscribeToMyItems,
+  submitVote, patchGameState, subscribeToMyItems, submitItemSearchChoice,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
-import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound } from '../firebase/hostService'
+import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound, hostResolveItemSearch } from '../firebase/hostService'
 import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent } from '../engine/event'
@@ -88,6 +88,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [actionLoading, setActionLoading] = useState(false)
   const [processSignal, setProcessSignal] = useState(0)
   const [myItemIds, setMyItemIds] = useState<string[]>([])
+  // 트럭 수색 아이템 선택 상태
+  const [truckKept, setTruckKept] = useState<string | null>(null)
+  const [truckGiven, setTruckGiven] = useState<string | null>(null)
+  const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
   const processingRef = useRef(false)
   const uid = getCurrentUid()
 
@@ -127,8 +131,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           }
         }
 
-        // event: zone_announce로 전환
-        else if (game.phase === 'event' && !game.currentVote) {
+        // event: 트럭 수색 아이템 선택 대기 중이면 넘어가지 않음
+        else if (game.phase === 'event' && !game.currentVote && !game.itemSearchPreview) {
+          await patchGameState(roomCode, { phase: 'zone_announce' })
+          didWork = true
+        }
+
+        // event: 트럭 수색 승자가 선택을 제출했으면 처리
+        else if (game.phase === 'event' && game.itemSearchChoice && game.itemSearchWinnerId) {
+          const { keptInstanceId, givenToPlayerId, givenInstanceId, returnedInstanceId } = game.itemSearchChoice
+          await hostResolveItemSearch(
+            roomCode, game, game.itemSearchWinnerId,
+            keptInstanceId, givenToPlayerId, givenInstanceId, returnedInstanceId
+          )
           await patchGameState(roomCode, { phase: 'zone_announce' })
           didWork = true
         }
@@ -152,7 +167,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               }
             }
             const nextState = await hostResolveVote(roomCode, game, victimId)
-            if (nextState.phase === 'event') {
+            if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
               await patchGameState(roomCode, { phase: 'zone_announce' })
             }
             didWork = true
@@ -364,6 +379,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         <div className="text-xs text-zinc-600">
           {chars.filter(c => c.isAlive).length} / {config.maxCapacity === Infinity ? '∞' : config.maxCapacity}
         </div>
+        {zoneName === 'parking' && (
+          <div className="text-xs text-zinc-500 flex items-center gap-1">
+            <span>🚚</span>
+            <span>트럭 {game!.itemDeck.length}장 남음</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -651,8 +672,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             ) : zoneState.zombies === 0 ? (
               survivorEvent === 'sheriff' ? (
                 <p className="text-yellow-400 font-bold">👮 보안관 선출 투표를 진행합니다</p>
-              ) : survivorEvent === 'item_search' ? (
-                <p className="text-blue-400 font-bold">🎒 아이템 탐색 투표를 진행합니다</p>
+              ) : survivorEvent === 'truck_search' ? (
+                <p className="text-blue-400 font-bold">🚚 트럭 수색 투표를 진행합니다</p>
               ) : (
                 <p className="text-zinc-400 text-sm">좀비가 없습니다. 이상 없음.</p>
               )
@@ -667,9 +688,161 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
-      // ── 이벤트 처리 ─────────────────────────────────────────
+      // ── 이벤트 처리 / 트럭 수색 선택 ────────────────────────
       case 'event': {
-        return <p className="text-zinc-500 text-xs">이벤트 처리 중...</p>
+        const preview = game!.itemSearchPreview
+        const winnerId = game!.itemSearchWinnerId
+        if (!preview || !winnerId) {
+          return <p className="text-zinc-500 text-xs">이벤트 처리 중...</p>
+        }
+
+        const isWinner = uid === winnerId
+        const winnerName = players[winnerId]?.nickname ?? '?'
+
+        if (!isWinner) {
+          return (
+            <div className="text-center">
+              <p className="text-lg mb-1">🚚</p>
+              <p className="text-zinc-300 text-sm">
+                <span className="font-bold text-white">{winnerName}</span>님이 트럭을 수색 중입니다...
+              </p>
+            </div>
+          )
+        }
+
+        // 승자 UI: 덱 장수에 따라 분기
+        const drawCount = preview.length  // 1, 2, 3
+        const allOtherPlayers = game!.playerOrder.filter(id => id !== uid)
+        const truckReturned = drawCount === 3
+          ? preview.find(id => id !== truckKept && id !== truckGiven) ?? null
+          : null
+        const canSubmit = drawCount === 1
+          ? true  // 1장: 바로 확정
+          : drawCount === 2
+            ? truckKept !== null && truckGiven !== null && truckGivenTo !== null && truckKept !== truckGiven
+            : truckKept !== null && truckGiven !== null && truckGivenTo !== null && truckKept !== truckGiven
+
+        const subtitle = drawCount === 1
+          ? '트럭에 1장만 남았습니다 — 자동 획득'
+          : drawCount === 2
+            ? '1장 보관 · 1장 증정'
+            : '1장 보관 · 1장 증정 · 1장 반환'
+
+        async function handleTruckSubmit() {
+          if (!canSubmit || !preview) return
+          const kept = drawCount === 1 ? preview[0] : truckKept
+          if (!kept) return
+          setActionLoading(true)
+          try {
+            if (drawCount === 1) {
+              await submitItemSearchChoice(roomCode, kept)
+            } else if (drawCount === 2 && truckGiven && truckGivenTo) {
+              await submitItemSearchChoice(roomCode, kept, truckGivenTo, truckGiven)
+            } else if (drawCount === 3 && truckGiven && truckGivenTo && truckReturned) {
+              await submitItemSearchChoice(roomCode, kept, truckGivenTo, truckGiven, truckReturned)
+            }
+            setTruckKept(null); setTruckGiven(null); setTruckGivenTo(null)
+          } finally {
+            setActionLoading(false)
+          }
+        }
+
+        return (
+          <div>
+            <p className="text-white text-sm font-bold mb-1">🚚 트럭 수색</p>
+            <p className="text-zinc-400 text-xs mb-3">{subtitle}</p>
+
+            {/* 1장: 바로 확정 버튼만 */}
+            {drawCount === 1 && (() => {
+              const instanceId = preview[0]
+              const itemId = instanceIdToItemId(instanceId)
+              const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
+              return (
+                <div className="bg-green-900/40 border border-green-600 rounded-xl p-3 mb-4 flex items-center gap-3">
+                  <span className="text-2xl">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                  <div>
+                    <p className="text-white text-sm font-medium">{cfg?.name ?? itemId}</p>
+                    <p className="text-zinc-400 text-xs">{cfg?.description ?? ''}</p>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* 2~3장: 보관/증정 선택 */}
+            {drawCount >= 2 && (
+              <div className="flex flex-col gap-2 mb-4">
+                {preview.map(instanceId => {
+                  const itemId = instanceIdToItemId(instanceId)
+                  const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
+                  const isKept = truckKept === instanceId
+                  const isGiven = truckGiven === instanceId
+                  const isReturned = drawCount === 3 && !isKept && !isGiven
+                  return (
+                    <div key={instanceId} className={`rounded-xl p-3 border transition-colors ${
+                      isKept ? 'bg-green-900/50 border-green-500' :
+                      isGiven ? 'bg-blue-900/50 border-blue-500' :
+                      'bg-zinc-800 border-zinc-700'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xl">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                        <div>
+                          <p className="text-white text-sm font-medium">{cfg?.name ?? itemId}</p>
+                          <p className="text-zinc-400 text-xs">{cfg?.description ?? ''}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setTruckKept(instanceId); if (truckGiven === instanceId) setTruckGiven(null) }}
+                          className={`text-xs px-2 py-1 rounded-lg transition-colors ${
+                            isKept ? 'bg-green-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+                          }`}>
+                          보관
+                        </button>
+                        <button
+                          onClick={() => { setTruckGiven(instanceId); if (truckKept === instanceId) setTruckKept(null) }}
+                          className={`text-xs px-2 py-1 rounded-lg transition-colors ${
+                            isGiven ? 'bg-blue-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+                          }`}>
+                          증정
+                        </button>
+                        {isReturned && (
+                          <span className="text-xs text-zinc-500 px-2 py-1">반환 예정</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 증정 대상 선택 (2장 이상) */}
+            {drawCount >= 2 && truckGiven && (
+              <div className="mb-4">
+                <p className="text-zinc-400 text-xs mb-2">증정할 플레이어 선택</p>
+                <div className="flex flex-wrap gap-2">
+                  {allOtherPlayers.map(pid => (
+                    <button key={pid}
+                      onClick={() => setTruckGivenTo(pid)}
+                      className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                        truckGivenTo === pid
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+                      }`}>
+                      {players[pid]?.nickname ?? pid}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleTruckSubmit}
+              disabled={!canSubmit || actionLoading}
+              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-semibold py-2 rounded-xl text-sm transition-colors">
+              {actionLoading ? '처리 중...' : '확정'}
+            </button>
+          </div>
+        )
       }
 
       // ── 투표 ────────────────────────────────────────────────
@@ -678,7 +851,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         const vote = game!.currentVote
         const voteZone = ZONE_CONFIGS[vote.zone]
         const voteTypeLabel = vote.type === 'zombie_attack' ? '좀비 공격' :
-          vote.type === 'item_search' ? '아이템 탐색' : '보안관 선출'
+          vote.type === 'truck_search' ? '트럭 수색' : '보안관 선출'
 
         const candidates = vote.candidates.map(id => ({
           id,
@@ -792,6 +965,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto">
             {ZONE_ORDER.map(renderZone)}
           </div>
+          {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
+          {game.phase === 'setup_place' && (
+            <div className="max-w-2xl mx-auto mt-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-yellow-300 text-sm">
+                ⭐ <span className="font-bold">{players[sheriffId]?.nickname ?? '?'}</span>님이 임시 보안관으로 선택되었습니다
+              </p>
+            </div>
+          )}
+
           {/* 액션 패널 */}
           <div className="max-w-2xl mx-auto mt-4 bg-zinc-900 rounded-2xl p-4">
             {renderActionPanel()}

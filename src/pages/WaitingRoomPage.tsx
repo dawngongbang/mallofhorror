@@ -54,7 +54,7 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const myPlayer = uid ? players[uid] : undefined
   const usedColors = playerList.map(p => p.color)
   // 호스트는 준비 버튼이 없으므로 ready 체크에서 제외
-  const allReady = playerList.length >= 3 && playerList.every(p => p.isReady || p.id === meta?.hostId)
+  const allReady = playerList.length >= 2 && playerList.every(p => p.isReady || p.id === meta?.hostId)  // TODO: 테스트용 2인, 배포 전 3으로 복원
 
   async function handleColorChange(color: PlayerColor) {
     if (!roomCode) return
@@ -169,7 +169,7 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
               disabled={!allReady || starting}
               className="w-full bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
             >
-              {starting ? '게임 시작 중...' : allReady ? '게임 시작' : playerList.length < 3 ? '3명 이상 필요' : '모두 준비 완료 시 시작 가능'}
+              {starting ? '게임 시작 중...' : allReady ? '게임 시작' : playerList.length < 2 ? '2명 이상 필요' : '모두 준비 완료 시 시작 가능'}
             </button>
           ) : (
             <button

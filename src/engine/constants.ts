@@ -106,6 +106,7 @@ export const CHARACTER_CONFIGS: Record<CharacterId, CharacterConfig> = {
 
 // 플레이어 수별 사용 캐릭터
 export const CHARACTERS_BY_PLAYER_COUNT: Record<number, CharacterId[]> = {
+  2: ['belle', 'toughguy', 'gunman', 'kid'],  // 테스트용 2인
   3: ['belle', 'toughguy', 'gunman', 'kid'],
   4: ['belle', 'toughguy', 'gunman'],
   5: ['belle', 'toughguy', 'gunman'],

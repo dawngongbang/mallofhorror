@@ -41,6 +41,8 @@ export function createTestState(): GameState {
     currentVote: null,
     itemDeck: [],
     itemSearchPreview: null,
+    itemSearchWinnerId: null,
+    itemSearchChoice: null,
     playerItemCounts: { p1: 3, p2: 3, p3: 3 },
     cardReactionWindow: null,
     winners: [],

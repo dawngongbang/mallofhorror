@@ -10,10 +10,10 @@ import { drawItemsForSearch } from './items'
 //   - 좀비 수 > 방어력이면 투표 발생
 //   - 패배자의 캐릭터 1개 사망 + 해당 구역 좀비 전부 소멸
 //
-// [2단계] 생존자 이벤트 (item_search / sheriff)
+// [2단계] 생존자 이벤트 (truck_search / sheriff)
 //   - 1단계 이후에도 살아남은 캐릭터가 있을 때만 진행
 //   - 보안실: sheriff 투표 (다음 라운드 보안관 결정)
-//   - 그 외: item_search 투표 (탐색자가 아이템 3장 중 1장 획득)
+//   - 그 외: truck_search 투표 (탐색자가 아이템 3장 중 1장 획득)
 //
 // → startZoneAttackPhase()  : 1단계 시작 (좀비 공격 여부 체크)
 // → startZoneSurvivorPhase(): 2단계 시작 (생존자 이벤트 여부 체크)
@@ -73,8 +73,8 @@ export function determineSurvivorEvent(
   if (isUnderAttack(zone, state)) return null
 
   if (zone === 'security') return 'sheriff'
-  if (zone === 'parking') return 'item_search'
-  return null  // 그 외 구역은 생존자 이벤트 없음
+  if (zone === 'parking' && state.itemDeck.length > 0) return 'truck_search'
+  return null  // 그 외 구역 또는 덱 소진 시 생존자 이벤트 없음
 }
 
 // 생존자 이벤트 투표 시작 (이벤트 없으면 null 반환)
@@ -89,18 +89,21 @@ export function startZoneSurvivorPhase(
   return { ...state, currentVote: voteState, phase: 'voting' }
 }
 
-// 아이템 탐색 투표 결과 적용
-// winner가 탐색자 → 덱에서 3장 뽑아 itemSearchPreview에 저장
+// 트럭 수색 투표 결과 적용
+// winner가 탐색자 → 덱에서 min(3, 남은 수)장 뽑아 itemSearchPreview에 저장
 export function applyItemSearchResult(
   state: GameState,
   _winnerId: string
 ): GameState {
   if (state.itemDeck.length === 0) return state
 
-  const { preview, remainingDeck } = drawItemsForSearch(state.itemDeck)
+  const drawCount = Math.min(3, state.itemDeck.length)
+  const { preview, remainingDeck } = drawItemsForSearch(state.itemDeck, drawCount)
+  // preview만 빼고 나머지 유지 (반환 카드는 나중에 다시 넣음)
+  const previewIds = new Set(preview.map(i => i.instanceId))
   return {
     ...state,
-    itemDeck: remainingDeck,
+    itemDeck: remainingDeck.filter(i => !previewIds.has(i.instanceId)),
     itemSearchPreview: preview.map(item => item.instanceId),
   }
 }

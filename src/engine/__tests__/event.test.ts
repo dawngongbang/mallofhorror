@@ -92,15 +92,15 @@ describe('applyZombieAttackResult', () => {
 // ── 2단계: 생존자 이벤트 ─────────────────────────────────────
 
 describe('determineSurvivorEvent', () => {
-  it('주차장에서 좀비 공격 해결 후 → item_search', () => {
+  it('주차장에서 좀비 공격 해결 후 → truck_search', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     state.zones.parking.zombies = 0
 
-    expect(determineSurvivorEvent('parking', state)).toBe('item_search')
+    expect(determineSurvivorEvent('parking', state)).toBe('truck_search')
   })
 
-  it('일반 구역(옷가게 등)은 item_search 없음 → null', () => {
+  it('일반 구역(옷가게 등)은 truck_search 없음 → null', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'clothing')
     state.zones.clothing.zombies = 0
@@ -144,7 +144,7 @@ describe('determineSurvivorEvent', () => {
 })
 
 describe('startZoneSurvivorPhase', () => {
-  it('주차장: item_search 투표 시작', () => {
+  it('주차장: truck_search 투표 시작', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
@@ -152,10 +152,10 @@ describe('startZoneSurvivorPhase', () => {
 
     const result = startZoneSurvivorPhase('parking', state)
     expect(result).not.toBeNull()
-    expect(result!.currentVote?.type).toBe('item_search')
+    expect(result!.currentVote?.type).toBe('truck_search')
   })
 
-  it('일반 구역: item_search 없음 → null', () => {
+  it('일반 구역: truck_search 없음 → null', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'clothing')
     addCharacterToZone(state, 'p2_belle', 'clothing')
@@ -187,7 +187,7 @@ describe('startZoneSurvivorPhase', () => {
 // ── 전체 흐름: 공격 → 생존자 이벤트 ─────────────────────────
 
 describe('2단계 흐름', () => {
-  it('주차장: 좀비 공격 없이 생존 → item_search', () => {
+  it('주차장: 좀비 공격 없이 생존 → truck_search', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
@@ -196,10 +196,10 @@ describe('2단계 흐름', () => {
     expect(startZoneAttackPhase('parking', state)).toBeNull()
 
     const survivorResult = startZoneSurvivorPhase('parking', state)
-    expect(survivorResult!.currentVote?.type).toBe('item_search')
+    expect(survivorResult!.currentVote?.type).toBe('truck_search')
   })
 
-  it('주차장: 공격 발생 → 사망 적용 → 생존자 item_search 진행', () => {
+  it('주차장: 공격 발생 → 사망 적용 → 생존자 truck_search 진행', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
@@ -213,11 +213,11 @@ describe('2단계 흐름', () => {
 
     const survivorResult = startZoneSurvivorPhase('parking', afterDeath)
     expect(survivorResult).not.toBeNull()
-    expect(survivorResult!.currentVote?.type).toBe('item_search')
+    expect(survivorResult!.currentVote?.type).toBe('truck_search')
     expect(survivorResult!.currentVote?.candidates).toContain('p2')
   })
 
-  it('일반 구역: 공격 해결 후에도 item_search 없음', () => {
+  it('일반 구역: 공격 해결 후에도 truck_search 없음', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'clothing')
     addCharacterToZone(state, 'p2_belle', 'clothing')
@@ -227,7 +227,7 @@ describe('2단계 흐름', () => {
     expect(startZoneSurvivorPhase('clothing', afterDeath)).toBeNull()
   })
 
-  it('주차장: 전멸 → item_search 없음', () => {
+  it('주차장: 전멸 → truck_search 없음', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     state.zones.parking.zombies = 1

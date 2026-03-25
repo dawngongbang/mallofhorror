@@ -126,7 +126,7 @@ export interface DiceRollResult {
 
 // ── 투표 ────────────────────────────────────────────────────
 
-export type VoteType = 'zombie_attack' | 'item_search' | 'sheriff'
+export type VoteType = 'zombie_attack' | 'truck_search' | 'sheriff'
 
 export interface VoteState {
   zone: ZoneName
@@ -146,7 +146,7 @@ export interface VoteResult {
   winner: string | null                // 가장 많이 지목된 플레이어
   tieBreak: 'none' | 'revote' | 'global_vote'
   // zombie_attack: winner의 캐릭터 사망 + 구역 좀비 소멸
-  // item_search: winner가 아이템 탐색
+  // truck_search: winner가 트럭 수색 (아이템 3장 중 1장 보관, 1장 증정, 1장 반환)
   // sheriff: winner가 다음 라운드 보안관
 }
 
@@ -164,7 +164,7 @@ export type GamePhase =
   | 'event'               // 이벤트 진입 (다음 구역으로 이동)
   | 'zone_announce'       // 구역 상황 공지 (2초 대기 후 처리)
   | 'card_react'          // 투표 전 카드 반응 창 (스프린트/히든카드)
-  | 'voting'              // 투표 진행 중 (zombie_attack / item_search / sheriff)
+  | 'voting'              // 투표 진행 중 (zombie_attack / truck_search / sheriff)
   | 'check_win'           // 승리 조건 체크
   | 'finished'            // 게임 종료
 
@@ -211,7 +211,14 @@ export interface GameState {
 
   // 아이템 덱
   itemDeck: Item[]                 // 남은 아이템 덱
-  itemSearchPreview: string[] | null  // 탐색자에게 보이는 아이템 3개 instanceId
+  itemSearchPreview: string[] | null  // 트럭 수색 승자에게 보이는 아이템 3개 instanceId
+  itemSearchWinnerId: string | null   // 트럭 수색 승자 (선택권 소유자)
+  itemSearchChoice: {                 // 승자가 제출한 선택
+    keptInstanceId: string
+    givenToPlayerId?: string          // 2장 이하면 없을 수 있음
+    givenInstanceId?: string
+    returnedInstanceId?: string       // 3장일 때만 존재
+  } | null
   playerItemCounts: Record<string, number>  // playerId → 보유 아이템 수 (공개)
 
   // 카드 반응 창 (voteReactionTiming 설정에 따라 활성화)

@@ -9,7 +9,7 @@ export function createInitialGameState(
   _settings: GameSettings
 ): GameState {
   const playerIds = players.map(p => p.id)
-  const actualCount = Math.max(3, Math.min(6, players.length))
+  const actualCount = Math.max(2, Math.min(6, players.length))  // TODO: 테스트용 2인, 배포 전 3으로 복원
   const characterIds = CHARACTERS_BY_PLAYER_COUNT[actualCount]
 
   // 캐릭터 인스턴스 생성
@@ -78,6 +78,8 @@ export function createInitialGameState(
 
     itemDeck: remainingDeck,
     itemSearchPreview: null,
+    itemSearchWinnerId: null,
+    itemSearchChoice: null,
     playerItemCounts: Object.fromEntries(playerIds.map(id => [id, 3])),
 
     cardReactionWindow: null,

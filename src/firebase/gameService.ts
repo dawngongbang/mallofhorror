@@ -145,6 +145,23 @@ export function subscribeToMyItems(
   return () => off(itemsRef)
 }
 
+// ── 플레이어 행동: 트럭 수색 아이템 선택 제출 ────────────────
+
+export async function submitItemSearchChoice(
+  roomCode: string,
+  keptInstanceId: string,
+  givenToPlayerId?: string,
+  givenInstanceId?: string,
+  returnedInstanceId?: string
+): Promise<void> {
+  await set(ref(db, `games/${roomCode}/game/itemSearchChoice`), {
+    keptInstanceId,
+    ...(givenToPlayerId && { givenToPlayerId }),
+    ...(givenInstanceId && { givenInstanceId }),
+    ...(returnedInstanceId && { returnedInstanceId }),
+  })
+}
+
 // ── 호스트 전용: 게임 상태 부분 업데이트 ─────────────────────
 
 export async function patchGameState(

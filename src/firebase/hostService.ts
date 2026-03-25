@@ -1,6 +1,6 @@
 import { get, ref } from 'firebase/database'
 import { db } from './config'
-import { writeGameState, patchGameState, clearPendingItemActions, writePrivateItems } from './gameService'
+import { writeGameState, patchGameState, clearPendingItemActions, writePrivateItems, getPrivateItems } from './gameService'
 import { updateRoomStatus } from './roomService'
 import type { GameState, GameSettings, Player } from '../engine/types'
 import { createInitialGameState } from '../engine/setup'
@@ -125,8 +125,10 @@ export async function hostResolveVote(
       next = applyZombieAttackResult(state, voteState.zone, victimCharacterId)
       break
     }
-    case 'item_search': {
+    case 'truck_search': {
+      // 3장 프리뷰 세팅 + 승자 기록 → 선택 UI 대기
       next = applyItemSearchResult(state, result.winner)
+      next = { ...next, itemSearchWinnerId: result.winner, itemSearchChoice: null }
       break
     }
     case 'sheriff': {
@@ -135,15 +137,95 @@ export async function hostResolveVote(
     }
   }
 
-  next = { ...next, currentVote: null, phase: 'event' }
+  if (voteState.type === 'truck_search') {
+    // 승자가 아이템 선택해야 하므로 event 페이즈로 대기 (zoneIndex 유지)
+    next = { ...next, currentVote: null, phase: 'event' }
+    await patchGameState(roomCode, {
+      currentVote: null,
+      itemDeck: next.itemDeck,
+      itemSearchPreview: next.itemSearchPreview,
+      itemSearchWinnerId: next.itemSearchWinnerId,
+      itemSearchChoice: null,
+      phase: 'event',
+    })
+  } else {
+    // zombie_attack은 같은 구역 재처리, sheriff는 다음 구역으로
+    const nextZoneIndex =
+      voteState.type === 'zombie_attack'
+        ? state.currentEventZoneIndex
+        : state.currentEventZoneIndex + 1
+
+    next = { ...next, currentVote: null, phase: 'event', currentEventZoneIndex: nextZoneIndex }
+    await patchGameState(roomCode, {
+      characters: next.characters,
+      zones: next.zones,
+      currentVote: null,
+      nextSheriffPlayerId: next.nextSheriffPlayerId,
+      itemDeck: next.itemDeck,
+      itemSearchPreview: null,
+      itemSearchWinnerId: null,
+      itemSearchChoice: null,
+      currentEventZoneIndex: nextZoneIndex,
+      phase: 'event',
+    })
+  }
+
+  return next
+}
+
+// ── 트럭 수색 아이템 선택 처리 (호스트 전용) ─────────────────
+
+export async function hostResolveItemSearch(
+  roomCode: string,
+  state: GameState,
+  winnerId: string,
+  keptInstanceId: string,
+  givenToPlayerId?: string,
+  givenInstanceId?: string,
+  returnedInstanceId?: string
+): Promise<GameState> {
+  // 승자 아이템 추가
+  const winnerItems = await getPrivateItems(roomCode, winnerId)
+  await writePrivateItems(roomCode, winnerId, [...winnerItems, keptInstanceId])
+
+  // 증정 (2장 이상일 때)
+  if (givenToPlayerId && givenInstanceId) {
+    const recipientItems = await getPrivateItems(roomCode, givenToPlayerId)
+    await writePrivateItems(roomCode, givenToPlayerId, [...recipientItems, givenInstanceId])
+  }
+
+  // 반환 (3장일 때)
+  let newDeck = [...state.itemDeck]
+  if (returnedInstanceId) {
+    const returnedItemId = returnedInstanceId.split('_').slice(0, -1).join('_') as import('../engine/types').ItemId
+    newDeck = [...newDeck, { instanceId: returnedInstanceId, itemId: returnedItemId }]
+  }
+
+  const newCounts = { ...state.playerItemCounts, [winnerId]: (state.playerItemCounts[winnerId] ?? 0) + 1 }
+  if (givenToPlayerId) {
+    newCounts[givenToPlayerId] = (state.playerItemCounts[givenToPlayerId] ?? 0) + 1
+  }
+
+  const nextZoneIndex = state.currentEventZoneIndex + 1
+  const next: GameState = {
+    ...state,
+    itemDeck: newDeck,
+    itemSearchPreview: null,
+    itemSearchWinnerId: null,
+    itemSearchChoice: null,
+    playerItemCounts: newCounts,
+    currentEventZoneIndex: nextZoneIndex,
+    phase: 'event',
+  }
+
   await patchGameState(roomCode, {
-    characters: next.characters,
-    zones: next.zones,
-    currentVote: null,
-    nextSheriffPlayerId: next.nextSheriffPlayerId,
-    itemDeck: next.itemDeck,
-    itemSearchPreview: next.itemSearchPreview,
-    phase: next.phase,
+    itemDeck: newDeck,
+    itemSearchPreview: null,
+    itemSearchWinnerId: null,
+    itemSearchChoice: null,
+    playerItemCounts: newCounts,
+    currentEventZoneIndex: nextZoneIndex,
+    phase: 'event',
   })
 
   return next
