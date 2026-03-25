@@ -5,7 +5,7 @@ import { ZONE_CONFIGS } from '../constants'
 export function createTestState(): GameState {
   const zones = {} as GameState['zones']
   for (const zoneName of Object.keys(ZONE_CONFIGS) as ZoneName[]) {
-    zones[zoneName] = { zombies: 0, characterIds: [] }
+    zones[zoneName] = { zombies: 0, characterIds: [], isClosed: false }
   }
 
   return {

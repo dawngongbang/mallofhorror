@@ -8,7 +8,7 @@ import { getCurrentUid } from '../firebase/auth'
 import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound, hostResolveItemSearch } from '../firebase/hostService'
 import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
-import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent } from '../engine/event'
+import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent, checkAndCloseZone } from '../engine/event'
 import { calculateVoteResult, calcDefense, isUnderAttack } from '../engine/combat'
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
 import { isZoneFull, calcBonusZombies } from '../engine/dice'
@@ -54,7 +54,7 @@ function normalizeGame(g: GameState): GameState {
         : raw && typeof raw === 'object'
           ? Object.values(raw) as string[]
           : []
-      return [k, { ...z, characterIds }]
+      return [k, { ...z, characterIds, isClosed: (z as any).isClosed ?? false }]
     })
   ) as GameState['zones']
 
@@ -218,6 +218,29 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       if (!g || g.phase !== 'zone_announce' || g.currentEventZoneIndex !== zoneIndex) return
 
       const zone = EVENT_ZONE_ORDER[zoneIndex]
+      const nextZoneIndex = zoneIndex + 1
+
+      // 폐쇄 조건 체크 (좀비 8개 이상 + 사람 없음 → 폐쇄)
+      const closedState = checkAndCloseZone(zone, g)
+      if (closedState) {
+        if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
+          await patchGameState(roomCode, { zones: closedState.zones, currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+        } else {
+          await hostEndRound(roomCode, closedState)
+        }
+        return
+      }
+
+      // 이미 폐쇄된 구역이면 스킵
+      if (g.zones[zone].isClosed) {
+        if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
+          await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+        } else {
+          await hostEndRound(roomCode, g)
+        }
+        return
+      }
+
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
         await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting' })
@@ -228,9 +251,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting' })
         return
       }
-      if (zoneIndex + 1 < EVENT_ZONE_ORDER.length) {
+      if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
         await patchGameState(roomCode, {
-          currentEventZoneIndex: zoneIndex + 1,
+          currentEventZoneIndex: nextZoneIndex,
           phase: 'event',
         })
       } else {
@@ -260,8 +283,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const d = game.setupDiceRoll as [number, number]
     const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
     const candidates = z1 === z2 ? [z1] : [z1, z2]
-    const available = candidates.filter(z => !isZoneFull(z, game))
-    return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game))
+    const available = candidates.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
+    return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
   })()
 
   // 내 미배치 캐릭터 목록 (zone==='parking'이지만 아직 zones.parking.characterIds에 없는 것들)
@@ -366,12 +389,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     return (
       <div
         key={zoneName}
-        className={`bg-zinc-800 rounded-xl p-3 flex flex-col gap-2 transition-all ${
-          isVotingZone ? 'ring-2 ring-red-500' : isCurrentEventZone ? 'ring-2 ring-yellow-500' : ''
+        className={`rounded-xl p-3 flex flex-col gap-2 transition-all ${
+          zoneState.isClosed
+            ? 'bg-zinc-900 opacity-60 ring-2 ring-zinc-700'
+            : isVotingZone ? 'bg-zinc-800 ring-2 ring-red-500'
+            : isCurrentEventZone ? 'bg-zinc-800 ring-2 ring-yellow-500'
+            : 'bg-zinc-800'
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-white">{config.displayName}</span>
+          <span className={`text-sm font-bold ${zoneState.isClosed ? 'text-zinc-500 line-through' : 'text-white'}`}>
+            {config.displayName}
+            {zoneState.isClosed && <span className="ml-1 text-xs no-underline not-italic text-red-600">🔒폐쇄</span>}
+          </span>
           <span className="text-xs text-zinc-500">#{config.zoneNumber}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -664,7 +694,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </p>
             )}
             <div className="flex gap-2 flex-wrap">
-              {ZONE_ORDER.filter(zone => zone !== myMovingCharData?.zone).map(zone => (
+              {ZONE_ORDER.filter(zone => zone !== myMovingCharData?.zone && !game!.zones[zone].isClosed).map(zone => (
                 <button key={zone} onClick={() => handleSealDestination(zone)} disabled={actionLoading}
                   className="bg-blue-700 hover:bg-blue-600 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
                   {ZONE_CONFIGS[zone].displayName}
@@ -692,6 +722,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             <p className="text-xs text-zinc-500 mb-1">이벤트 ({zoneIdx + 1}/6)</p>
             <p className="text-lg font-bold text-white mb-3">
               #{config.zoneNumber} {config.displayName}
+              {zoneState.isClosed && <span className="ml-2 text-sm text-red-500">🔒 폐쇄</span>}
             </p>
             <div className="flex justify-center gap-4 mb-3 text-sm text-zinc-300">
               <span>🧟 좀비 <strong className="text-white">{zoneState.zombies}</strong></span>
@@ -700,10 +731,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 <span>🛡 방어 <strong className="text-white">{defense}</strong></span>
               )}
             </div>
-            {aliveCount === 0 ? (
+            {zoneState.isClosed ? (
+              <p className="text-red-600 font-bold">🔒 폐쇄된 구역입니다. 이벤트가 발생하지 않습니다.</p>
+            ) : aliveCount === 0 ? (
               zoneState.zombies === 0
                 ? <p className="text-zinc-500 text-sm">사람도 좀비도 없습니다.</p>
-                : <p className="text-zinc-500 text-sm">사람이 없습니다.</p>
+                : zoneState.zombies >= 8
+                  ? <p className="text-red-600 font-bold">🔒 좀비가 가득 찼습니다! 구역이 폐쇄됩니다.</p>
+                  : <p className="text-zinc-500 text-sm">사람이 없습니다.</p>
             ) : zoneState.zombies === 0 ? (
               survivorEvent === 'sheriff' ? (
                 <p className="text-yellow-400 font-bold">👮 보안관 선출 투표를 진행합니다</p>

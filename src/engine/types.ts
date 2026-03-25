@@ -18,6 +18,7 @@ export interface ZoneConfig {
   zoneNumber: number    // 주사위 눈과 매핑 (1~6)
   maxCapacity: number   // 최대 수용 인원 (주차장은 Infinity)
   defenseLimit: number  // 방어 가능 최대 수치 (주차장은 0)
+  canClose: boolean     // false = 주차장 (좀비 아무리 많아도 폐쇄 안 됨)
 }
 
 // ── 캐릭터 ──────────────────────────────────────────────────
@@ -173,6 +174,7 @@ export type GamePhase =
 export interface ZoneState {
   zombies: number
   characterIds: string[]  // 이 구역의 캐릭터 인스턴스 ID 목록
+  isClosed: boolean       // 폐쇄 구역 여부
 }
 
 // ── 게임 상태 ────────────────────────────────────────────────

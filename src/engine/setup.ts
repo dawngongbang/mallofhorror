@@ -30,8 +30,8 @@ export function createInitialGameState(
     return { ...player, characterIds: playerCharIds }
   })
 
-  // 구역 초기화 (모든 캐릭터는 아직 배치 안 됨)
-  const zones = initZones()
+  // 구역 초기화 (모든 캐릭터는 아직 배치 안 됨, 3~4인은 clothing 폐쇄)
+  const zones = initZones(players.length)
 
   // 아이템 덱 생성 및 배분
   const shuffledDeck = shuffle(createItemDeck())
@@ -90,10 +90,12 @@ export function createInitialGameState(
 }
 
 // 구역 초기 상태 (좀비 0, 캐릭터 없음)
-function initZones(): Record<ZoneName, { zombies: number; characterIds: string[] }> {
-  const zones = {} as Record<ZoneName, { zombies: number; characterIds: string[] }>
+// playerCount: 3~4인이면 clothing(#2) 폐쇄 상태로 시작
+function initZones(playerCount: number): Record<ZoneName, { zombies: number; characterIds: string[]; isClosed: boolean }> {
+  const zones = {} as Record<ZoneName, { zombies: number; characterIds: string[]; isClosed: boolean }>
   for (const zoneName of Object.keys(ZONE_CONFIGS) as ZoneName[]) {
-    zones[zoneName] = { zombies: 0, characterIds: [] }
+    const startClosed = zoneName === 'clothing' && playerCount >= 3 && playerCount <= 4
+    zones[zoneName] = { zombies: 0, characterIds: [], isClosed: startClosed }
   }
   return zones
 }

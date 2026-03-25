@@ -1,6 +1,7 @@
 import type { GameState, ZoneName, VoteType } from './types'
 import { isUnderAttack, createVoteState } from './combat'
 import { drawItemsForSearch } from './items'
+import { ZONE_CONFIGS } from './constants'
 
 // ── 구역 이벤트 — 2단계 처리 ─────────────────────────────────
 //
@@ -21,11 +22,28 @@ import { drawItemsForSearch } from './items'
 
 // ── 1단계: 좀비 공격 ─────────────────────────────────────────
 
+// 폐쇄 조건 체크 및 적용: 좀비 8개 이상 + 사람 없음 + canClose
+// zone_announce 시점에 호출. 폐쇄되면 true 반환
+export function checkAndCloseZone(zone: ZoneName, state: GameState): GameState | null {
+  const zoneState = state.zones[zone]
+  if (zoneState.isClosed) return null  // 이미 폐쇄됨
+  if (!ZONE_CONFIGS[zone].canClose) return null
+  const aliveCount = zoneState.characterIds.filter(id => state.characters[id]?.isAlive).length
+  if (zoneState.zombies >= 8 && aliveCount === 0) {
+    return {
+      ...state,
+      zones: { ...state.zones, [zone]: { ...zoneState, isClosed: true } },
+    }
+  }
+  return null
+}
+
 // 좀비 공격 투표 시작 (공격 중이 아니면 null 반환)
 export function startZoneAttackPhase(
   zone: ZoneName,
   state: GameState
 ): GameState | null {
+  if (state.zones[zone].isClosed) return null  // 폐쇄 구역은 이벤트 없음
   if (!hasAliveCharacters(zone, state)) return null
   if (!isUnderAttack(zone, state)) return null
 
@@ -68,6 +86,7 @@ export function determineSurvivorEvent(
   zone: ZoneName,
   state: GameState
 ): VoteType | null {
+  if (state.zones[zone].isClosed) return null
   if (!hasAliveCharacters(zone, state)) return null
   // 이 시점에서 좀비 공격이 남아 있으면 안 됨 (1단계 미완료 버그)
   if (isUnderAttack(zone, state)) return null

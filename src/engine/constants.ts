@@ -9,6 +9,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 1,
     maxCapacity: 3,
     defenseLimit: 3,
+    canClose: true,
   },
   clothing: {
     name: 'clothing',
@@ -16,6 +17,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 2,
     maxCapacity: 4,
     defenseLimit: 4,
+    canClose: true,
   },
   toy: {
     name: 'toy',
@@ -23,6 +25,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 3,
     maxCapacity: 4,
     defenseLimit: 4,
+    canClose: true,
   },
   parking: {
     name: 'parking',
@@ -30,6 +33,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 4,
     maxCapacity: Infinity,
     defenseLimit: 0,  // 항상 습격
+    canClose: false,  // 좀비 아무리 많아도 폐쇄 안 됨
   },
   security: {
     name: 'security',
@@ -37,6 +41,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 5,
     maxCapacity: 3,
     defenseLimit: 3,
+    canClose: true,
   },
   supermarket: {
     name: 'supermarket',
@@ -44,6 +49,7 @@ export const ZONE_CONFIGS: Record<ZoneName, ZoneConfig> = {
     zoneNumber: 6,
     maxCapacity: 6,
     defenseLimit: 4,  // 6명이어도 방어는 4까지
+    canClose: true,
   },
 }
 
