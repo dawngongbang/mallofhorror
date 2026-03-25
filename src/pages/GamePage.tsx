@@ -72,6 +72,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [meta, setMeta] = useState<RoomMeta | null>(null)
   const [selectedSetupCharId, setSelectedSetupCharId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [processSignal, setProcessSignal] = useState(0)
   const processingRef = useRef(false)
   const uid = getCurrentUid()
 
@@ -150,11 +151,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         }
       } finally {
         processingRef.current = false
+        // Firebase 업데이트가 processing 중에 도착했을 수 있으므로 강제 재실행
+        setProcessSignal(s => s + 1)
       }
     }
 
     runHostStep()
-  }, [game, isHost, roomCode])
+  }, [game, isHost, roomCode, processSignal])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -337,12 +340,22 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         const currentOwner = players[currentSetupPlayerId]
 
         if (!isMyTurnToPlace) {
+          const d = game!.setupDiceRoll as [number, number] | null
           return (
             <div className="text-center">
-              <p className="text-zinc-400 text-sm">
+              <p className="text-zinc-400 text-sm mb-1">
                 <span className="text-white font-bold">{currentOwner?.nickname}</span>님이 캐릭터 배치 중...
               </p>
-              <p className="text-zinc-600 text-xs mt-1">남은 배치: {game!.setupPlacementOrder.length}번</p>
+              {d ? (
+                <p className="text-xs text-zinc-500">
+                  🎲 {d[0]}, {d[1]} →{' '}
+                  <span className="text-yellow-400">{setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}</span>
+                  {' '}중 선택
+                </p>
+              ) : (
+                <p className="text-zinc-600 text-xs">주사위 대기 중...</p>
+              )}
+              <p className="text-zinc-700 text-xs mt-1">남은 배치: {game!.setupPlacementOrder.length}번</p>
             </div>
           )
         }
