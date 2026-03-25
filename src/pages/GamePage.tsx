@@ -88,6 +88,7 @@ function normalizeGame(g: GameState): GameState {
     finalScores:            g.finalScores            ?? {},
     playerItemCounts:       g.playerItemCounts       ?? {},
     currentVote:            normalizedVote,
+    itemSearchPreview:      g.itemSearchPreview ? toArray(g.itemSearchPreview) : null,
   }
 }
 
@@ -540,8 +541,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       // ── 주사위 결과 공개 (보안관만 확인 가능) ────────────────────
       case 'dice_reveal': {
-        // 보안관이 아니면 결과 숨김 (CCTV 아이템 미구현으로 추후 추가 예정)
-        if (uid !== sheriffId) {
+        // 실제 보안관만 확인 가능 (CCTV 아이템 미구현으로 추후 추가 예정)
+        if (uid !== sheriffId || !game!.isRealSheriff) {
           return (
             <div className="text-center">
               <p className="text-zinc-400 text-sm">보안관이 주사위 결과를 확인 중...</p>
@@ -1046,20 +1047,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             </div>
           )}
 
-          {/* 보안관 주사위 결과 상시 표시 */}
-          {uid === sheriffId && game.lastDiceRoll && game.phase !== 'roll_dice' && game.phase !== 'setup_place' && (
-            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-700 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
-              <span className="text-yellow-500 text-xs font-bold">🎲 이번 라운드 주사위</span>
-              <div className="flex gap-1">
-                {game.lastDiceRoll.dice.map((d, i) => (
-                  <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
-                {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
-                  <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
-                ))}
-              </div>
+          {/* 주사위 배너: 라운드 중 항상 표시. 실제 보안관만 값 공개 */}
+          {game.lastDiceRoll && game.phase !== 'roll_dice' && game.phase !== 'dice_reveal' && game.phase !== 'setup_place' && (
+            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+              <span className="text-yellow-600 text-xs font-bold">🎲 이번 라운드 주사위</span>
+              {uid === sheriffId && game.isRealSheriff ? (
+                <>
+                  <div className="flex gap-1">
+                    {game.lastDiceRoll.dice.map((d, i) => (
+                      <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
+                    {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
+                      <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <span className="text-zinc-600 text-xs">보안관만 확인 가능</span>
+              )}
             </div>
           )}
 

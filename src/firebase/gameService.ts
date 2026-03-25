@@ -132,7 +132,9 @@ export async function getPrivateItems(
   playerId: string
 ): Promise<string[]> {
   const snap = await get(ref(db, `games/${roomCode}/private/${playerId}/items`))
-  return snap.val() ?? []
+  const val = snap.val()
+  if (!val) return []
+  return Array.isArray(val) ? val : Object.values(val) as string[]
 }
 
 export function subscribeToMyItems(
