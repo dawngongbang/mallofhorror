@@ -69,6 +69,10 @@
             }
           },
 
+          "itemSearchChoice": {
+            ".write": "auth.uid === root.child('games').child($roomId).child('game/itemSearchWinnerId').val()"
+          },
+
           "pendingItemActions": {
             "$playerId": {
               ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
