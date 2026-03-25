@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   subscribeToGame, declareCharacter, sealDestination,
   submitVote, patchGameState, subscribeToMyItems, submitItemSearchChoice,
+  submitSheriffRollRequest,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -130,8 +131,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       processingRef.current = true
       let didWork = false
       try {
+        // roll_dice: 보안관이 요청하면 주사위 굴리기
+        if (game.phase === 'roll_dice' && game.sheriffRollRequest) {
+          await hostRollDice(roomCode, game)
+          didWork = true
+        }
+
         // character_select: 전원 선언 완료 → destination_seal
-        if (game.phase === 'character_select') {
+        else if (game.phase === 'character_select') {
           const declared = Object.keys(game.characterDeclarations)
           if (declared.length >= game.playerOrder.length) {
             await patchGameState(roomCode, { phase: 'destination_seal' })
@@ -345,7 +352,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   async function handleRollDice() {
     if (!game || actionLoading) return
     setActionLoading(true)
-    await hostRollDice(roomCode, game)
+    await submitSheriffRollRequest(roomCode)
     setActionLoading(false)
   }
 
@@ -600,7 +607,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       // ── 주사위 (2라운드~) ────────────────────────────────────
       case 'roll_dice': {
-        if (!isHost) {
+        const isSheriff = uid === sheriffId
+        if (!isSheriff) {
           return (
             <p className="text-zinc-400 text-sm">
               보안관 <span className="text-white font-bold">{players[sheriffId]?.nickname}</span>이 주사위를 굴리는 중...

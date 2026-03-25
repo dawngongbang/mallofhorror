@@ -83,6 +83,7 @@ export function createInitialGameState(
     playerItemCounts: Object.fromEntries(playerIds.map(id => [id, 3])),
 
     cardReactionWindow: null,
+    sheriffRollRequest: null,
 
     winners: [],
     finalScores: {},

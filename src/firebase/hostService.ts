@@ -39,11 +39,12 @@ export async function hostRollDice(
   state: GameState
 ): Promise<GameState> {
   const roll = rollZombieDice()
-  const next = { ...state, lastDiceRoll: roll, phase: 'dice_reveal' as const }
+  const next = { ...state, lastDiceRoll: roll, phase: 'dice_reveal' as const, sheriffRollRequest: null }
 
   await patchGameState(roomCode, {
     lastDiceRoll: roll,
     phase: 'dice_reveal',
+    sheriffRollRequest: null,
   })
 
   return next

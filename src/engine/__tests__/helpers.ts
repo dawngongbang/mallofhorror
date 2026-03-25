@@ -45,6 +45,7 @@ export function createTestState(): GameState {
     itemSearchChoice: null,
     playerItemCounts: { p1: 3, p2: 3, p3: 3 },
     cardReactionWindow: null,
+    sheriffRollRequest: null,
     winners: [],
     finalScores: {},
   }

@@ -164,6 +164,13 @@ export async function submitItemSearchChoice(
   })
 }
 
+// ── 보안관 행동: 주사위 굴리기 요청 ──────────────────────────
+// 보안관(임시/정식)이 roll_dice 단계에서 호출 → 호스트가 감지 후 실제 굴리기 처리
+
+export async function submitSheriffRollRequest(roomCode: string): Promise<void> {
+  await set(ref(db, `games/${roomCode}/game/sheriffRollRequest`), Date.now())
+}
+
 // ── 호스트 전용: 게임 상태 부분 업데이트 ─────────────────────
 
 export async function patchGameState(

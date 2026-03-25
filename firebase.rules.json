@@ -73,6 +73,10 @@
             ".write": "auth.uid === root.child('games').child($roomId).child('game/itemSearchWinnerId').val()"
           },
 
+          "sheriffRollRequest": {
+            ".write": "auth != null && root.child('games').child($roomId).child('game/phase').val() === 'roll_dice'"
+          },
+
           "pendingItemActions": {
             "$playerId": {
               ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
