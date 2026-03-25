@@ -208,6 +208,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     return () => clearTimeout(timer)
   }, [game?.phase, isHost, roomCode])
 
+  // zone_announce deps용: 현재 구역 좀비 수 (좀비 습격 후 0으로 바뀔 때 effect 재실행 필요)
+  const zoneAnnounceZone = game?.phase === 'zone_announce' ? EVENT_ZONE_ORDER[game.currentEventZoneIndex] : null
+  const zoneAnnounceZombies = zoneAnnounceZone ? game?.zones?.[zoneAnnounceZone]?.zombies : undefined
+
   // ── zone_announce: 2초 후 실제 구역 이벤트 처리 ──────────────
   useEffect(() => {
     if (!isHost || !game || game.phase !== 'zone_announce') return
@@ -261,7 +265,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       }
     }, 2000)
     return () => clearTimeout(timer)
-  }, [game?.phase, game?.currentEventZoneIndex, isHost, roomCode])
+  }, [game?.phase, game?.currentEventZoneIndex, zoneAnnounceZombies, isHost, roomCode])
 
   if (!game) {
     return (
@@ -1039,6 +1043,23 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               <p className="text-yellow-300 text-sm">
                 ⭐ <span className="font-bold">{players[sheriffId]?.nickname ?? '?'}</span>님이 임시 보안관으로 선택되었습니다
               </p>
+            </div>
+          )}
+
+          {/* 보안관 주사위 결과 상시 표시 */}
+          {uid === sheriffId && game.lastDiceRoll && game.phase !== 'roll_dice' && game.phase !== 'setup_place' && (
+            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-700 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+              <span className="text-yellow-500 text-xs font-bold">🎲 이번 라운드 주사위</span>
+              <div className="flex gap-1">
+                {game.lastDiceRoll.dice.map((d, i) => (
+                  <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
+                {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
+                  <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
+                ))}
+              </div>
             </div>
           )}
 

@@ -94,7 +94,7 @@ export function createInitialGameState(
 function initZones(playerCount: number): Record<ZoneName, { zombies: number; characterIds: string[]; isClosed: boolean }> {
   const zones = {} as Record<ZoneName, { zombies: number; characterIds: string[]; isClosed: boolean }>
   for (const zoneName of Object.keys(ZONE_CONFIGS) as ZoneName[]) {
-    const startClosed = zoneName === 'clothing' && playerCount >= 3 && playerCount <= 4
+    const startClosed = zoneName === 'clothing' && playerCount <= 4
     zones[zoneName] = { zombies: 0, characterIds: [], isClosed: startClosed }
   }
   return zones
