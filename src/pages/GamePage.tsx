@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   subscribeToGame, declareCharacter, sealDestination,
-  submitVote, patchGameState,
+  submitVote, patchGameState, subscribeToMyItems,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -10,11 +10,23 @@ import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent } from '../engine/event'
 import { calculateVoteResult, calcDefense, isUnderAttack } from '../engine/combat'
-import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
+import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
 import { isZoneFull, calcBonusZombies } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
 
 const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
+
+// instanceId 예: "hidden_card_0", "sprint_2", "axe_0" → itemId 추출
+function instanceIdToItemId(instanceId: string): string {
+  const parts = instanceId.split('_')
+  parts.pop()
+  return parts.join('_')
+}
+
+const ITEM_CATEGORY: Record<string, string> = {
+  axe: '🪓', pistol: '🔫', shotgun: '🔫', bat: '🏏', grenade: '💣', chainsaw: '⚙️',
+  sprint: '👟', hidden_card: '🃏', threat: '😤', hardware: '🔧', cctv: '📷',
+}
 
 const COLOR_BG: Record<string, string> = {
   red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
@@ -61,6 +73,7 @@ function normalizeGame(g: GameState): GameState {
     characters:             g.characters             ?? {},
     zones:                  normalizedZones,
     finalScores:            g.finalScores            ?? {},
+    playerItemCounts:       g.playerItemCounts       ?? {},
     currentVote:            normalizedVote,
   }
 }
@@ -74,6 +87,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [selectedSetupCharId, setSelectedSetupCharId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [processSignal, setProcessSignal] = useState(0)
+  const [myItemIds, setMyItemIds] = useState<string[]>([])
   const processingRef = useRef(false)
   const uid = getCurrentUid()
 
@@ -81,8 +95,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const unsubGame = subscribeToGame(roomCode, g => setGame(g ? normalizeGame(g) : null))
     const unsubPlayers = subscribeToPlayers(roomCode, setPlayers)
     const unsubMeta = subscribeToMeta(roomCode, setMeta)
-    return () => { unsubGame(); unsubPlayers(); unsubMeta() }
-  }, [roomCode])
+    const unsubItems = uid ? subscribeToMyItems(roomCode, uid, setMyItemIds) : () => {}
+    return () => { unsubGame(); unsubPlayers(); unsubMeta(); unsubItems() }
+  }, [roomCode, uid])
 
   // ── 호스트 자동 진행 ─────────────────────────────────────────
   const isHost = meta?.hostId === uid
@@ -773,6 +788,28 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           <div className="max-w-2xl mx-auto mt-4 bg-zinc-900 rounded-2xl p-4">
             {renderActionPanel()}
           </div>
+
+          {/* 내 아이템 패널 */}
+          {myItemIds.length > 0 && (
+            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 rounded-2xl p-4">
+              <p className="text-xs text-zinc-500 mb-2">내 아이템</p>
+              <div className="flex flex-wrap gap-2">
+                {myItemIds.map(instanceId => {
+                  const itemId = instanceIdToItemId(instanceId)
+                  const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
+                  if (!cfg) return null
+                  return (
+                    <div key={instanceId}
+                      title={cfg.description}
+                      className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg px-2.5 py-1.5 cursor-default transition-colors">
+                      <span className="text-sm">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                      <span className="text-xs font-medium text-white">{cfg.name}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 플레이어 사이드바 */}
@@ -782,8 +819,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             {game.playerOrder.map(playerId => {
               const player = players[playerId]
               const isSheriff = playerId === sheriffId
-              const aliveCount = Object.values(game.characters)
-                .filter(c => c.playerId === playerId && c.isAlive).length
+              const aliveChars = Object.values(game.characters)
+                .filter(c => c.playerId === playerId && c.isAlive)
+              const aliveCount = aliveChars.length
               const isDeclared = !!game.characterDeclarations[playerId]
               const isSealed = !!game.destinationStatus[playerId]
               const hasVoted = !!game.currentVote?.status[playerId]
@@ -803,13 +841,39 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     {isSheriff && <span className="text-yellow-400 text-xs">👮</span>}
                     {playerId === uid && <span className="text-blue-400 text-xs">나</span>}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-500">생존 {aliveCount}명</span>
-                    {statusDot && (
-                      <span className={`text-xs ${statusDot === '✓' ? 'text-green-400' : 'text-zinc-600'}`}>
-                        {statusDot}
-                      </span>
+                  {/* 살아있는 캐릭터 */}
+                  <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                    {aliveChars.map(c => {
+                      const cfg = CHARACTER_CONFIGS[c.characterId]
+                      const zoneCfg = ZONE_CONFIGS[c.zone]
+                      return (
+                        <span
+                          key={c.id}
+                          title={`${cfg?.name} — ${zoneCfg?.displayName}`}
+                          className={`text-xs px-1.5 py-0.5 rounded font-medium bg-zinc-700 text-zinc-200`}
+                        >
+                          {cfg?.name ?? c.characterId}
+                        </span>
+                      )
+                    })}
+                    {aliveCount === 0 && (
+                      <span className="text-xs text-zinc-600">전멸</span>
                     )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-600">{aliveCount}명 생존</span>
+                    <div className="flex items-center gap-1">
+                      {game.playerItemCounts[playerId] > 0 && (
+                        <span className="text-xs text-zinc-500">
+                          🎒{game.playerItemCounts[playerId]}
+                        </span>
+                      )}
+                      {statusDot && (
+                        <span className={`text-xs ${statusDot === '✓' ? 'text-green-400' : 'text-zinc-600'}`}>
+                          {statusDot}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )

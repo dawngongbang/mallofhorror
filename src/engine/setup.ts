@@ -78,6 +78,7 @@ export function createInitialGameState(
 
     itemDeck: remainingDeck,
     itemSearchPreview: null,
+    playerItemCounts: Object.fromEntries(playerIds.map(id => [id, 3])),
 
     cardReactionWindow: null,
 

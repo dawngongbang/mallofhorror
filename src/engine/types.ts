@@ -211,6 +211,7 @@ export interface GameState {
   // 아이템 덱
   itemDeck: Item[]                 // 남은 아이템 덱
   itemSearchPreview: string[] | null  // 탐색자에게 보이는 아이템 3개 instanceId
+  playerItemCounts: Record<string, number>  // playerId → 보유 아이템 수 (공개)
 
   // 카드 반응 창 (voteReactionTiming 설정에 따라 활성화)
   cardReactionWindow: CardReactionWindow | null
