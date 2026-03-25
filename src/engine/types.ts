@@ -163,6 +163,7 @@ export type GamePhase =
   | 'move_execute'        // 이동④: 순서대로 이동
   | 'event'               // 이벤트 진입 (다음 구역으로 이동)
   | 'zone_announce'       // 구역 상황 공지 (2초 대기 후 처리)
+  | 'card_react'          // 투표 전 카드 반응 창 (스프린트/히든카드)
   | 'voting'              // 투표 진행 중 (zombie_attack / item_search / sheriff)
   | 'check_win'           // 승리 조건 체크
   | 'finished'            // 게임 종료
@@ -239,6 +240,7 @@ export interface CardReactionWindow {
   // before_vote: 후보 플레이어 전원 대기, 사용 여부 개별 기록
   candidatePlayers: string[]              // 후보 플레이어 ID 목록
   usedCards: Record<string, 'sprint' | 'hidden_card'>  // playerId → 사용한 카드
+  sprintTargets: Record<string, { characterId: string; newZone: ZoneName }>  // 스프린트 목적지
   escaped: string[]                       // 카드로 후보에서 빠진 플레이어 ID
 
   // after_vote: 패배자 1인만 대기

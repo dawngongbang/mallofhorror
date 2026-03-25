@@ -107,12 +107,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     async function runHostStep() {
       if (!game || processingRef.current) return
       processingRef.current = true
+      let didWork = false
       try {
-        // character_select: 전원 선언 완료 → destination_seal (declarationOrder는 이미 설정됨)
+        // character_select: 전원 선언 완료 → destination_seal
         if (game.phase === 'character_select') {
           const declared = Object.keys(game.characterDeclarations)
           if (declared.length >= game.playerOrder.length) {
             await patchGameState(roomCode, { phase: 'destination_seal' })
+            didWork = true
           }
         }
 
@@ -121,12 +123,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           const sealed = Object.values(game.destinationStatus).filter(Boolean).length
           if (sealed >= game.playerOrder.length) {
             await hostResolveMovement(roomCode, game)
+            didWork = true
           }
         }
 
-        // event: zone_announce로 전환 (실제 처리는 별도 타이머에서)
+        // event: zone_announce로 전환
         else if (game.phase === 'event' && !game.currentVote) {
           await patchGameState(roomCode, { phase: 'zone_announce' })
+          didWork = true
         }
 
         // voting: 전원 투표 완료 → 결과 처리
@@ -148,16 +152,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               }
             }
             const nextState = await hostResolveVote(roomCode, game, victimId)
-            // 투표 직후 event 페이즈 확정이므로 즉시 zone_announce 전환
-            // (processSignal 타이밍 의존 없이 확실하게 진행)
             if (nextState.phase === 'event') {
               await patchGameState(roomCode, { phase: 'zone_announce' })
             }
+            didWork = true
           }
         }
       } finally {
         processingRef.current = false
-        setProcessSignal(s => s + 1)
+        // 실제로 작업을 수행한 경우에만 재실행 신호 (무한루프 방지)
+        if (didWork) setProcessSignal(s => s + 1)
       }
     }
 
