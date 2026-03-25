@@ -49,22 +49,15 @@ export async function hostRollDice(
   return next
 }
 
-// ── 주사위 결과 적용 — 좀비 배치 + character_select 전환 (호스트 전용) ──
+// ── 주사위 공개 후 이동 페이즈로 전환 (호스트 전용) ──────────
+// 좀비 배치는 이동 완료 후 hostResolveMovement에서 처리
 
 export async function hostApplyDiceRoll(
   roomCode: string,
   state: GameState
 ): Promise<GameState> {
-  if (!state.lastDiceRoll) return state
-  let next = applyZombiePlacement(state, state.lastDiceRoll)
-  next = applyBonusZombies(next)
-  next = { ...next, phase: 'character_select' as const }
-
-  await patchGameState(roomCode, {
-    zones: next.zones,
-    phase: 'character_select',
-  })
-
+  const next = { ...state, phase: 'character_select' as const }
+  await patchGameState(roomCode, { phase: 'character_select' })
   return next
 }
 
@@ -77,7 +70,14 @@ export async function hostResolveMovement(
   const snap = await get(ref(db, `games/${roomCode}/game/sealedDestinations`))
   const sealedDestinations = snap.val() ?? {}
 
-  const next = resolveMovesInOrder(state, sealedDestinations)
+  let next = resolveMovesInOrder(state, sealedDestinations)
+
+  // 이동 완료 후 좀비 배치 (주사위는 이미 lastDiceRoll에 저장됨)
+  if (state.lastDiceRoll) {
+    next = applyZombiePlacement(next, state.lastDiceRoll)
+    next = applyBonusZombies(next)
+  }
+
   const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0 }
 
   await patchGameState(roomCode, {

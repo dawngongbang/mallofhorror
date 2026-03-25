@@ -97,6 +97,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [actionLoading, setActionLoading] = useState(false)
   const [processSignal, setProcessSignal] = useState(0)
   const [myItemIds, setMyItemIds] = useState<string[]>([])
+  const gameRef = useRef<GameState | null>(null)
+  gameRef.current = game  // 항상 최신 game 참조 (stale closure 방지)
   // 트럭 수색 아이템 선택 상태
   const [truckKept, setTruckKept] = useState<string | null>(null)
   const [truckGiven, setTruckGiven] = useState<string | null>(null)
@@ -205,26 +207,30 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   // ── zone_announce: 2초 후 실제 구역 이벤트 처리 ──────────────
   useEffect(() => {
     if (!isHost || !game || game.phase !== 'zone_announce') return
-    const capturedGame = game
+    const zoneIndex = game.currentEventZoneIndex
     const timer = setTimeout(async () => {
-      const zone = EVENT_ZONE_ORDER[capturedGame.currentEventZoneIndex]
-      const attackState = startZoneAttackPhase(zone, capturedGame)
+      // gameRef.current로 최신 상태 사용 (stale closure 방지)
+      const g = gameRef.current
+      if (!g || g.phase !== 'zone_announce' || g.currentEventZoneIndex !== zoneIndex) return
+
+      const zone = EVENT_ZONE_ORDER[zoneIndex]
+      const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
         await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting' })
         return
       }
-      const survivorState = startZoneSurvivorPhase(zone, capturedGame)
+      const survivorState = startZoneSurvivorPhase(zone, g)
       if (survivorState) {
         await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting' })
         return
       }
-      if (capturedGame.currentEventZoneIndex + 1 < EVENT_ZONE_ORDER.length) {
+      if (zoneIndex + 1 < EVENT_ZONE_ORDER.length) {
         await patchGameState(roomCode, {
-          currentEventZoneIndex: capturedGame.currentEventZoneIndex + 1,
+          currentEventZoneIndex: zoneIndex + 1,
           phase: 'event',
         })
       } else {
-        await hostEndRound(roomCode, capturedGame)
+        await hostEndRound(roomCode, g)
       }
     }, 2000)
     return () => clearTimeout(timer)
