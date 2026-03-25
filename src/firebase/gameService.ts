@@ -164,6 +164,16 @@ export async function submitItemSearchChoice(
   })
 }
 
+// ── 패배자 행동: 희생 캐릭터 선택 ───────────────────────────
+// pendingVictimSelection.loserPlayerId 만 쓸 수 있음 (Firebase 규칙)
+
+export async function submitVictimChoice(
+  roomCode: string,
+  characterId: string
+): Promise<void> {
+  await set(ref(db, `games/${roomCode}/game/pendingVictimSelection/chosenCharacterId`), characterId)
+}
+
 // ── 보안관 행동: 주사위 굴리기 요청 ──────────────────────────
 // 보안관(임시/정식)이 roll_dice 단계에서 호출 → 호스트가 감지 후 실제 굴리기 처리
 

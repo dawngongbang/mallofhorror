@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   subscribeToGame, declareCharacter, sealDestination,
   submitVote, patchGameState, subscribeToMyItems, submitItemSearchChoice,
-  submitSheriffRollRequest,
+  submitSheriffRollRequest, submitVictimChoice,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -90,6 +90,7 @@ function normalizeGame(g: GameState): GameState {
     playerItemCounts:       g.playerItemCounts       ?? {},
     currentVote:            normalizedVote,
     itemSearchPreview:      g.itemSearchPreview ? toArray(g.itemSearchPreview) : null,
+    pendingVictimSelection: g.pendingVictimSelection ?? null,
   }
 }
 
@@ -172,15 +173,25 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           didWork = true
         }
 
+        // voting: 패배자가 희생 캐릭터 선택 완료 → 처리
+        else if (game.phase === 'voting' && game.pendingVictimSelection?.chosenCharacterId) {
+          const pvs = game.pendingVictimSelection
+          const nextState = await hostResolveVote(roomCode, game, pvs.chosenCharacterId)
+          await patchGameState(roomCode, { pendingVictimSelection: null })
+          if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
+            await patchGameState(roomCode, { phase: 'zone_announce' })
+          }
+          didWork = true
+        }
+
         // voting: 전원 투표 완료 → 결과 처리
-        else if (game.phase === 'voting' && game.currentVote) {
+        else if (game.phase === 'voting' && game.currentVote && !game.pendingVictimSelection) {
           const cv = game.currentVote
           console.log('[HOST] voting check — eligibleVoters:', cv.eligibleVoters, 'status:', cv.status)
           const allVoted = cv.eligibleVoters.length > 0 &&
             cv.eligibleVoters.every(id => cv.status[id])
           console.log('[HOST] allVoted:', allVoted)
           if (allVoted) {
-            let victimId: string | undefined
             if (cv.type === 'zombie_attack') {
               const result = calculateVoteResult(cv, game)
               console.log('[HOST] zombie_attack result:', result)
@@ -191,18 +202,34 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     c.isAlive &&
                     game.zones[cv.zone].characterIds.includes(c.id)
                   )
-                victimId = loserCharsInZone[0]?.id
-                console.log('[HOST] victimId:', victimId)
+                if (loserCharsInZone.length <= 1) {
+                  // 캐릭터가 1개 이하 → 자동 선택
+                  const nextState = await hostResolveVote(roomCode, game, loserCharsInZone[0]?.id)
+                  if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
+                    await patchGameState(roomCode, { phase: 'zone_announce' })
+                  }
+                } else {
+                  // 캐릭터 여러 개 → 패배자에게 선택 위임
+                  await patchGameState(roomCode, {
+                    pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner },
+                  })
+                }
+                didWork = true
+              } else {
+                // 동률 → hostResolveVote가 재투표 처리
+                await hostResolveVote(roomCode, game, undefined)
+                didWork = true
               }
+            } else {
+              // truck_search / sheriff
+              console.log('[HOST] calling hostResolveVote (non-zombie)')
+              const nextState = await hostResolveVote(roomCode, game, undefined)
+              console.log('[HOST] hostResolveVote done, nextState.phase:', nextState.phase)
+              if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
+                await patchGameState(roomCode, { phase: 'zone_announce' })
+              }
+              didWork = true
             }
-            console.log('[HOST] calling hostResolveVote')
-            const nextState = await hostResolveVote(roomCode, game, victimId)
-            console.log('[HOST] hostResolveVote done, nextState.phase:', nextState.phase)
-            if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
-              await patchGameState(roomCode, { phase: 'zone_announce' })
-              console.log('[HOST] patched to zone_announce')
-            }
-            didWork = true
           }
         }
       } catch (err) {
@@ -939,6 +966,41 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       // ── 투표 ────────────────────────────────────────────────
       case 'voting': {
+        // 패배자 희생 캐릭터 선택 대기 중
+        const pvs = game!.pendingVictimSelection
+        if (pvs && !pvs.chosenCharacterId) {
+          const isLoser = uid === pvs.loserPlayerId
+          if (isLoser) {
+            const myCharsInZone = Object.values(game!.characters).filter(
+              c => c.playerId === uid && c.isAlive && game!.zones[pvs.zone].characterIds.includes(c.id)
+            )
+            return (
+              <div>
+                <p className="text-red-400 font-bold text-sm mb-2">
+                  💀 {ZONE_CONFIGS[pvs.zone].displayName} — 희생할 캐릭터를 선택하세요
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {myCharsInZone.map(c => (
+                    <button key={c.id} onClick={async () => {
+                      setActionLoading(true)
+                      await submitVictimChoice(roomCode, c.id)
+                      setActionLoading(false)
+                    }} disabled={actionLoading}
+                      className="bg-zinc-700 hover:bg-red-800 text-white px-3 py-2 rounded-xl text-sm transition-colors">
+                      {CHARACTER_CONFIGS[c.characterId]?.name ?? c.characterId}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+          return (
+            <p className="text-zinc-400 text-sm">
+              <span className="text-white font-bold">{players[pvs.loserPlayerId]?.nickname}</span>이 희생할 캐릭터를 선택 중...
+            </p>
+          )
+        }
+
         if (!game!.currentVote) return <p className="text-zinc-400 text-sm">투표 준비 중...</p>
         const vote = game!.currentVote
         const voteZone = ZONE_CONFIGS[vote.zone]

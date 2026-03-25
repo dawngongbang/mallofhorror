@@ -229,6 +229,13 @@ export interface GameState {
   // 보안관 주사위 굴리기 요청 (보안관이 쓰면 호스트가 처리)
   sheriffRollRequest: number | null   // 요청 타임스탬프 (null = 요청 없음)
 
+  // 좀비 공격 투표 패배자의 희생 캐릭터 선택 대기
+  pendingVictimSelection: {
+    zone: ZoneName
+    loserPlayerId: string
+    chosenCharacterId?: string   // 패배자가 선택 완료 시 기록
+  } | null
+
   // 결과
   winners: string[]
   finalScores: Record<string, number>
