@@ -3,6 +3,7 @@ import {
   set,
   get,
   update,
+  remove,
   onValue,
   off,
   serverTimestamp,
@@ -165,6 +166,10 @@ export function subscribeToPlayers(
 }
 
 // ── 호스트 전용: 게임 시작 ────────────────────────────────────
+
+export async function deleteRoom(roomCode: string): Promise<void> {
+  await remove(ref(db, `games/${roomCode}`))
+}
 
 export async function updateRoomStatus(
   roomCode: string,

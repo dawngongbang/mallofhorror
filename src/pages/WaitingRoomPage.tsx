@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor } from '../firebase/roomService'
+import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor, deleteRoom } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { initPresence, startHeartbeat } from '../firebase/presenceService'
 import { startGame } from '../firebase/hostService'
@@ -92,7 +92,10 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
             <h2 className="text-xl font-bold text-white">대기실</h2>
             <p className="text-zinc-500 text-xs mt-0.5">친구에게 코드를 알려주세요</p>
           </div>
-          <button onClick={onLeave} className="text-zinc-500 hover:text-white text-sm transition-colors">
+          <button onClick={async () => {
+            if (isHost) await deleteRoom(roomCode)
+            onLeave()
+          }} className="text-zinc-500 hover:text-white text-sm transition-colors">
             나가기
           </button>
         </div>

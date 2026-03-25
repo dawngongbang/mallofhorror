@@ -6,6 +6,7 @@ import {
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { hostRollDice, hostResolveMovement, hostResolveVote, hostEndRound } from '../firebase/hostService'
+import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase } from '../engine/event'
 import { calculateVoteResult } from '../engine/combat'
@@ -604,7 +605,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             보안관: <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
           </span>
           <span className="text-xs text-zinc-600">#{roomCode}</span>
-          <button onClick={onLeave} className="text-zinc-600 hover:text-white text-xs transition-colors">나가기</button>
+          <button onClick={async () => {
+            if (isHost) await deleteRoom(roomCode)
+            onLeave()
+          }} className="text-zinc-600 hover:text-white text-xs transition-colors">나가기</button>
         </div>
       </div>
 
