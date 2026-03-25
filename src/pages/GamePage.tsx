@@ -128,7 +128,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
     async function runHostStep() {
       if (!game || processingRef.current) return
-      console.log('[HOST] runHostStep phase:', game?.phase, 'processing:', processingRef.current)
+      console.log('[HOST] runHostStep phase:', game?.phase, 'pvs:', game?.pendingVictimSelection, 'processing:', processingRef.current)
       processingRef.current = true
       let didWork = false
       try {
@@ -176,7 +176,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         // voting: 패배자가 희생 캐릭터 선택 완료 → 처리
         else if (game.phase === 'voting' && game.pendingVictimSelection?.chosenCharacterId) {
           const pvs = game.pendingVictimSelection
+          console.log('[HOST] victim chosen:', pvs.chosenCharacterId, 'zone:', pvs.zone)
           const nextState = await hostResolveVote(roomCode, game, pvs.chosenCharacterId)
+          console.log('[HOST] hostResolveVote done after victim selection, phase:', nextState.phase)
           await patchGameState(roomCode, { pendingVictimSelection: null })
           if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
             await patchGameState(roomCode, { phase: 'zone_announce' })
@@ -983,8 +985,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   {myCharsInZone.map(c => (
                     <button key={c.id} onClick={async () => {
                       setActionLoading(true)
-                      await submitVictimChoice(roomCode, c.id)
-                      setActionLoading(false)
+                      try {
+                        console.log('[VICTIM] submitting choice:', c.id)
+                        await submitVictimChoice(roomCode, c.id)
+                        console.log('[VICTIM] submitted OK')
+                      } catch (err) {
+                        console.error('[VICTIM] submit error:', err)
+                      } finally {
+                        setActionLoading(false)
+                      }
                     }} disabled={actionLoading}
                       className="bg-zinc-700 hover:bg-red-800 text-white px-3 py-2 rounded-xl text-sm transition-colors">
                       {CHARACTER_CONFIGS[c.characterId]?.name ?? c.characterId}
