@@ -121,8 +121,18 @@ export async function hostResolveVote(
 
   switch (voteState.type) {
     case 'zombie_attack': {
-      if (!victimCharacterId) break
-      next = applyZombieAttackResult(state, voteState.zone, victimCharacterId)
+      if (victimCharacterId) {
+        next = applyZombieAttackResult(state, voteState.zone, victimCharacterId)
+      } else {
+        // victimId를 못 찾은 경우에도 좀비는 반드시 소멸 (무한루프 방지)
+        next = {
+          ...state,
+          zones: {
+            ...state.zones,
+            [voteState.zone]: { ...state.zones[voteState.zone], zombies: 0 },
+          },
+        }
+      }
       break
     }
     case 'truck_search': {

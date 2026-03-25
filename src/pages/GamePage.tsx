@@ -46,7 +46,16 @@ function normalizeGame(g: GameState): GameState {
   // 각 zone의 characterIds 정규화
   const zones = g.zones ?? {} as GameState['zones']
   const normalizedZones = Object.fromEntries(
-    Object.entries(zones).map(([k, z]) => [k, { ...z, characterIds: (z as any).characterIds ?? [] }])
+    Object.entries(zones).map(([k, z]) => {
+      const raw = (z as any).characterIds
+      // Firebase가 배열을 객체로 반환하는 경우 대비
+      const characterIds: string[] = Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === 'object'
+          ? Object.values(raw) as string[]
+          : []
+      return [k, { ...z, characterIds }]
+    })
   ) as GameState['zones']
 
   // currentVote 내부 배열 정규화
