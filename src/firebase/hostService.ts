@@ -171,7 +171,7 @@ export async function hostResolveVote(
       characters: next.characters,
       zones: next.zones,
       currentVote: null,
-      nextSheriffPlayerId: next.nextSheriffPlayerId,
+      nextSheriffPlayerId: next.nextSheriffPlayerId ?? null,
       itemDeck: next.itemDeck,
       itemSearchPreview: null,
       itemSearchWinnerId: null,
