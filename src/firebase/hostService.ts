@@ -6,7 +6,7 @@ import type { GameState, GameSettings, Player } from '../engine/types'
 import { createInitialGameState } from '../engine/setup'
 import { createItemDeck, shuffle, dealItems } from '../engine/items'
 import { rollZombieDice, applyZombiePlacement, applyBonusZombies } from '../engine/dice'
-import { resolveMovesInOrder } from '../engine/movement'
+import { planMovesInOrder, applyMoveStep } from '../engine/movement'
 import { calculateVoteResult } from '../engine/combat'
 import { applyZombieAttackResult, applyItemSearchResult, applySheriffVoteResult } from '../engine/event'
 import { resolveNextSheriff, updateSheriffStatus, initRoundState } from '../engine/phase'
@@ -62,34 +62,75 @@ export async function hostApplyDiceRoll(
   return next
 }
 
-// ── 이동 공개 및 처리 (호스트 전용) ─────────────────────────
+// ── 이동 계획 수립 (호스트 전용) ────────────────────────────
+// 이동 결과를 미리 계산하되 보드는 변경하지 않음 → move_execute 페이즈에서 단계적 적용
 
-export async function hostResolveMovement(
+export async function hostPrepareMovement(
   roomCode: string,
   state: GameState
 ): Promise<GameState> {
   const snap = await get(ref(db, `games/${roomCode}/game/sealedDestinations`))
   const sealedDestinations = snap.val() ?? {}
 
-  let next = resolveMovesInOrder(state, sealedDestinations)
+  const resolvedMoves = planMovesInOrder(state, sealedDestinations)
 
-  // 이동 완료 후 좀비 배치 (주사위는 이미 lastDiceRoll에 저장됨)
-  if (state.lastDiceRoll) {
-    next = applyZombiePlacement(next, state.lastDiceRoll)
-    next = applyBonusZombies(next)
+  const next: GameState = {
+    ...state,
+    resolvedMoves,
+    currentMoveStep: 0,
+    phase: 'move_execute',
   }
 
-  const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0 }
-
   await patchGameState(roomCode, {
-    zones: withPhase.zones,
-    characters: withPhase.characters,
-    resolvedMoves: withPhase.resolvedMoves,
-    phase: withPhase.phase,
-    currentEventZoneIndex: 0,
+    resolvedMoves,
+    currentMoveStep: 0,
+    phase: 'move_execute',
   })
 
-  return withPhase
+  return next
+}
+
+// ── 이동 단계 처리 (호스트 전용) ────────────────────────────
+// currentMoveStep 인덱스의 이동을 보드에 적용하고 한 칸 전진
+// 모든 이동이 완료되면 좀비 배치 후 event 페이즈로 전환
+
+export async function hostApplyNextMoveStep(
+  roomCode: string,
+  state: GameState
+): Promise<GameState> {
+  const step = state.currentMoveStep
+  const totalMoves = state.resolvedMoves.length
+
+  if (step < totalMoves) {
+    // 이 step의 이동 적용
+    const next = applyMoveStep(state, step)
+
+    await patchGameState(roomCode, {
+      zones: next.zones,
+      characters: next.characters,
+      resolvedMoves: next.resolvedMoves,
+      currentMoveStep: next.currentMoveStep,
+    })
+
+    return next
+  } else {
+    // 모든 이동 완료 → 좀비 배치 후 event
+    let next = state
+    if (state.lastDiceRoll) {
+      next = applyZombiePlacement(next, state.lastDiceRoll)
+      next = applyBonusZombies(next)
+    }
+    const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0 }
+
+    await patchGameState(roomCode, {
+      zones: withPhase.zones,
+      characters: withPhase.characters,
+      phase: 'event',
+      currentEventZoneIndex: 0,
+    })
+
+    return withPhase
+  }
 }
 
 // ── 투표 결과 처리 (호스트 전용) ─────────────────────────────

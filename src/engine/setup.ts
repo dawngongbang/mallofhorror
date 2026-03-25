@@ -71,6 +71,7 @@ export function createInitialGameState(
     sealedDestinations: {},
     destinationStatus: {},
     resolvedMoves: [],
+    currentMoveStep: 0,
 
     lastDiceRoll: null,
     currentEventZoneIndex: 0,

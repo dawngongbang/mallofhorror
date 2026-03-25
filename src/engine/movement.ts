@@ -14,18 +14,19 @@ export function isValidMove(
   return { valid: true }
 }
 
-// 봉인된 이동 전부 공개 후 순서대로 처리
-// 목적지가 가득 찼으면 주차장으로 튕겨남
-export function resolveMovesInOrder(
+// 이동 계획 수립 (보드 변경 없이 이동 결과만 계산)
+// 목적지가 가득 찼으면 주차장으로 튕겨남 (순서대로 시뮬레이션)
+export function planMovesInOrder(
   state: GameState,
   sealedDestinations: Record<string, SealedDestination>
-): GameState {
+): ResolvedMove[] {
   // 선언 순서대로 정렬
   const orderedDeclarations = Object.values(state.characterDeclarations).sort(
     (a, b) => a.order - b.order
   )
 
-  let newState = { ...state, zones: deepCloneZones(state.zones), characters: { ...state.characters } }
+  // 이동 시뮬레이션용 임시 상태 (실제 state는 변경하지 않음)
+  let simState = { ...state, zones: deepCloneZones(state.zones), characters: { ...state.characters } }
   const resolvedMoves: ResolvedMove[] = []
 
   for (const declaration of orderedDeclarations) {
@@ -33,38 +34,68 @@ export function resolveMovesInOrder(
     const sealed = sealedDestinations[playerId]
     if (!sealed) continue
 
-    const character = newState.characters[characterId]
+    const character = simState.characters[characterId]
     if (!character || !character.isAlive) continue
 
     const fromZone = character.zone
-    let targetZone = sealed.targetZone
+    const intendedZone = sealed.targetZone
+    let targetZone = intendedZone
     let bumpedToParking = false
 
     // 목적지가 가득 찼으면 주차장으로
-    if (targetZone !== 'parking' && isZoneFull(targetZone, newState)) {
+    if (targetZone !== 'parking' && isZoneFull(targetZone, simState)) {
       targetZone = 'parking'
       bumpedToParking = true
     }
 
-    // 캐릭터 이동
-    newState = moveCharacter(newState, characterId, fromZone, targetZone)
+    // 시뮬레이션 상태만 갱신 (실제 board 반영은 move_execute 단계에서 단계적으로)
+    simState = applyMoveToState(simState, characterId, fromZone, targetZone)
 
     resolvedMoves.push({
       playerId,
       characterId,
       fromZone,
+      intendedZone,
       targetZone,
       order,
-      executed: true,
+      executed: false,
       bumpedToParking,
     })
   }
 
-  return { ...newState, resolvedMoves }
+  return resolvedMoves
 }
 
-// 단일 캐릭터 이동 적용
-function moveCharacter(
+// 전체 이동 한 번에 처리 (테스트 및 레거시 호환용)
+export function resolveMovesInOrder(
+  state: GameState,
+  sealedDestinations: Record<string, SealedDestination>
+): GameState {
+  const moves = planMovesInOrder(state, sealedDestinations)
+  let next = { ...state, resolvedMoves: moves, currentMoveStep: 0 }
+  for (let i = 0; i < moves.length; i++) {
+    next = applyMoveStep(next, i)
+  }
+  return next
+}
+
+// 단일 이동 적용 (move_execute 단계에서 한 칸씩 호출)
+export function applyMoveStep(
+  state: GameState,
+  moveIndex: number
+): GameState {
+  const move = state.resolvedMoves[moveIndex]
+  if (!move) return state
+
+  const newState = applyMoveToState(state, move.characterId, move.fromZone, move.targetZone)
+  const updatedMoves = state.resolvedMoves.map((m, i) =>
+    i === moveIndex ? { ...m, executed: true } : m
+  )
+  return { ...newState, resolvedMoves: updatedMoves, currentMoveStep: moveIndex + 1 }
+}
+
+// 단일 캐릭터 이동 적용 (내부용)
+function applyMoveToState(
   state: GameState,
   characterId: string,
   fromZone: ZoneName,

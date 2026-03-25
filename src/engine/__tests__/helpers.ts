@@ -36,6 +36,7 @@ export function createTestState(): GameState {
     sealedDestinations: {},
     destinationStatus: {},
     resolvedMoves: [],
+    currentMoveStep: 0,
     lastDiceRoll: null,
     currentEventZoneIndex: 0,
     currentVote: null,

@@ -6,7 +6,7 @@ import {
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
-import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound, hostResolveItemSearch } from '../firebase/hostService'
+import { hostRollDice, hostApplyDiceRoll, hostPrepareMovement, hostApplyNextMoveStep, hostResolveVote, hostEndRound, hostResolveItemSearch } from '../firebase/hostService'
 import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
 import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent, checkAndCloseZone } from '../engine/event'
@@ -79,7 +79,12 @@ function normalizeGame(g: GameState): GameState {
     playerOrder:            g.playerOrder            ?? [],
     setupPlacementOrder:    g.setupPlacementOrder    ?? [],
     declarationOrder:       g.declarationOrder       ?? [],
-    resolvedMoves:          g.resolvedMoves          ?? [],
+    resolvedMoves:          Array.isArray(g.resolvedMoves)
+                              ? g.resolvedMoves
+                              : g.resolvedMoves && typeof g.resolvedMoves === 'object'
+                                ? Object.values(g.resolvedMoves) as import('../engine/types').ResolvedMove[]
+                                : [],
+    currentMoveStep:        g.currentMoveStep        ?? 0,
     winners:                g.winners                ?? [],
     characterDeclarations:  g.characterDeclarations  ?? {},
     destinationStatus:      g.destinationStatus      ?? {},
@@ -147,11 +152,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           }
         }
 
-        // destination_seal: 전원 봉인 완료 → 이동 처리
+        // destination_seal: 전원 봉인 완료 → 이동 계획 수립 (단계별 처리는 move_execute 에서)
         else if (game.phase === 'destination_seal') {
           const sealed = Object.values(game.destinationStatus).filter(Boolean).length
           if (sealed >= game.playerOrder.length) {
-            await hostResolveMovement(roomCode, game)
+            await hostPrepareMovement(roomCode, game)
             didWork = true
           }
         }
@@ -255,6 +260,18 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 3000)
     return () => clearTimeout(timer)
   }, [game?.phase, isHost, roomCode])
+
+  // ── move_execute: 1.5초 간격으로 이동 단계 처리 ──────────────
+  useEffect(() => {
+    if (!isHost || !game || game.phase !== 'move_execute') return
+    const step = game.currentMoveStep
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'move_execute' || g.currentMoveStep !== step) return
+      await hostApplyNextMoveStep(roomCode, g)
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.currentMoveStep, isHost, roomCode])
 
   // zone_announce deps용: 현재 구역 좀비 수 (좀비 습격 후 0으로 바뀔 때 effect 재실행 필요)
   const zoneAnnounceZone = game?.phase === 'zone_announce' ? EVENT_ZONE_ORDER[game.currentEventZoneIndex] : null
@@ -755,6 +772,61 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               ))}
             </div>
             <p className="text-zinc-600 text-xs mt-2">{sealedCount} / {total}명 완료</p>
+          </div>
+        )
+      }
+
+      // ── 이동 단계별 공지 ─────────────────────────────────────
+      case 'destination_reveal':
+      case 'move_execute': {
+        const moves = game!.resolvedMoves
+        const step = game!.currentMoveStep  // 지금까지 적용된 이동 수
+        const doneMoves = moves.slice(0, step)   // 이미 처리된 이동들
+        const currentMove = moves[step] ?? null  // 지금 공지 중인 이동 (아직 미적용)
+
+        return (
+          <div>
+            <p className="text-zinc-500 text-xs mb-2">이동 공개 ({step}/{moves.length})</p>
+            {/* 이미 처리된 이동 목록 */}
+            {doneMoves.map((m, i) => {
+              const charConf = CHARACTER_CONFIGS[game!.characters[m.characterId]?.characterId]
+              const pName = players[m.playerId]?.nickname ?? m.playerId
+              const toName = ZONE_CONFIGS[m.targetZone]?.displayName ?? m.targetZone
+              const fromName = ZONE_CONFIGS[m.fromZone]?.displayName ?? m.fromZone
+              return (
+                <div key={i} className="text-xs text-zinc-500 mb-1">
+                  <span className="text-zinc-400">{pName}의 {charConf?.name}</span>
+                  {m.bumpedToParking
+                    ? <> {fromName}→<span className="text-red-400">{toName}(주차장)</span> ✗</>
+                    : <> {fromName}→<span className="text-green-400">{toName}</span> ✓</>
+                  }
+                </div>
+              )
+            })}
+            {/* 현재 공지 중인 이동 */}
+            {currentMove && (() => {
+              const charConf = CHARACTER_CONFIGS[game!.characters[currentMove.characterId]?.characterId]
+              const pName = players[currentMove.playerId]?.nickname ?? currentMove.playerId
+              const intendedName = ZONE_CONFIGS[currentMove.intendedZone]?.displayName ?? currentMove.intendedZone
+              const fromName = ZONE_CONFIGS[currentMove.fromZone]?.displayName ?? currentMove.fromZone
+              return (
+                <div className="bg-zinc-800 rounded-lg p-2 mt-1">
+                  <p className="text-white text-sm font-bold">
+                    {pName}의 <span className="text-yellow-400">{charConf?.name}</span>
+                  </p>
+                  <p className="text-zinc-300 text-xs mt-0.5">
+                    {fromName} → {intendedName} 이동 중...
+                  </p>
+                </div>
+              )
+            })()}
+            {/* 모든 이동 완료 */}
+            {!currentMove && moves.length > 0 && (
+              <p className="text-zinc-400 text-xs mt-1">이동 완료. 좀비 배치 중...</p>
+            )}
+            {moves.length === 0 && (
+              <p className="text-zinc-500 text-xs">이동할 캐릭터가 없습니다.</p>
+            )}
           </div>
         )
       }

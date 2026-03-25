@@ -111,7 +111,8 @@ export interface ResolvedMove {
   playerId: string
   characterId: string
   fromZone: ZoneName
-  targetZone: ZoneName
+  intendedZone: ZoneName    // 원래 목적지 (튕겨났을 때도 유지)
+  targetZone: ZoneName      // 실제 도착지 (튕기면 parking)
   order: number
   executed: boolean
   bumpedToParking: boolean  // 목적지 가득 차서 주차장으로 튕겨남
@@ -205,6 +206,7 @@ export interface GameState {
   sealedDestinations: Record<string, SealedDestination>
   destinationStatus: Record<string, boolean>
   resolvedMoves: ResolvedMove[]
+  currentMoveStep: number          // move_execute 페이즈에서 현재 처리 중인 이동 인덱스
 
   // 이벤트 페이즈
   lastDiceRoll: DiceRollResult | null

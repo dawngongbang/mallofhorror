@@ -100,6 +100,7 @@ export function initRoundState(state: GameState): GameState {
     sealedDestinations: {},
     destinationStatus: {},
     resolvedMoves: [],
+    currentMoveStep: 0,
     currentEventZoneIndex: 0,
     currentVote: null,
     lastDiceRoll: null,
