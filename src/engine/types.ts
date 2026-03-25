@@ -161,7 +161,8 @@ export type GamePhase =
   | 'destination_seal'    // 이동②: 목적지 봉인
   | 'destination_reveal'  // 이동③: 동시 공개
   | 'move_execute'        // 이동④: 순서대로 이동
-  | 'event'               // 이벤트 (1번 구역부터 순서대로)
+  | 'event'               // 이벤트 진입 (다음 구역으로 이동)
+  | 'zone_announce'       // 구역 상황 공지 (2초 대기 후 처리)
   | 'voting'              // 투표 진행 중 (zombie_attack / item_search / sheriff)
   | 'check_win'           // 승리 조건 체크
   | 'finished'            // 게임 종료

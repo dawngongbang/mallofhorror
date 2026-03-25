@@ -8,8 +8,8 @@ import { getCurrentUid } from '../firebase/auth'
 import { hostRollDice, hostApplyDiceRoll, hostResolveMovement, hostResolveVote, hostEndRound } from '../firebase/hostService'
 import { deleteRoom } from '../firebase/roomService'
 import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../engine/setup'
-import { startZoneAttackPhase, startZoneSurvivorPhase } from '../engine/event'
-import { calculateVoteResult } from '../engine/combat'
+import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent } from '../engine/event'
+import { calculateVoteResult, calcDefense, isUnderAttack } from '../engine/combat'
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
 import { isZoneFull, calcBonusZombies } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
@@ -25,7 +25,8 @@ const PHASE_LABEL: Record<string, string> = {
   setup_place: '초기 배치', roll_dice: '주사위', dice_reveal: '주사위 공개',
   character_select: '캐릭터 선언', destination_seal: '목적지 선택',
   destination_reveal: '공개', move_execute: '이동',
-  event: '이벤트', voting: '투표', check_win: '승리 체크', finished: '종료',
+  event: '이벤트', zone_announce: '구역 공지', voting: '투표',
+  check_win: '승리 체크', finished: '종료',
 }
 
 // Firebase는 빈 배열/객체를 null로 저장하므로 정규화 필요
@@ -108,24 +109,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           }
         }
 
-        // event: 구역별 자동 처리
+        // event: zone_announce로 전환 (실제 처리는 별도 타이머에서)
         else if (game.phase === 'event' && !game.currentVote) {
-          const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
-          const attackState = startZoneAttackPhase(zone, game)
-          if (attackState) {
-            await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting' })
-            return
-          }
-          const survivorState = startZoneSurvivorPhase(zone, game)
-          if (survivorState) {
-            await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting' })
-            return
-          }
-          if (game.currentEventZoneIndex + 1 < EVENT_ZONE_ORDER.length) {
-            await patchGameState(roomCode, { currentEventZoneIndex: game.currentEventZoneIndex + 1 })
-          } else {
-            await hostEndRound(roomCode, game)
-          }
+          await patchGameState(roomCode, { phase: 'zone_announce' })
         }
 
         // voting: 전원 투표 완료 → 결과 처리
@@ -168,6 +154,34 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 3000)
     return () => clearTimeout(timer)
   }, [game?.phase, isHost, roomCode])
+
+  // ── zone_announce: 2초 후 실제 구역 이벤트 처리 ──────────────
+  useEffect(() => {
+    if (!isHost || !game || game.phase !== 'zone_announce') return
+    const capturedGame = game
+    const timer = setTimeout(async () => {
+      const zone = EVENT_ZONE_ORDER[capturedGame.currentEventZoneIndex]
+      const attackState = startZoneAttackPhase(zone, capturedGame)
+      if (attackState) {
+        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting' })
+        return
+      }
+      const survivorState = startZoneSurvivorPhase(zone, capturedGame)
+      if (survivorState) {
+        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting' })
+        return
+      }
+      if (capturedGame.currentEventZoneIndex + 1 < EVENT_ZONE_ORDER.length) {
+        await patchGameState(roomCode, {
+          currentEventZoneIndex: capturedGame.currentEventZoneIndex + 1,
+          phase: 'event',
+        })
+      } else {
+        await hostEndRound(roomCode, capturedGame)
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.currentEventZoneIndex, isHost, roomCode])
 
   if (!game) {
     return (
@@ -585,15 +599,54 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
+      // ── 구역 공지 ────────────────────────────────────────────
+      case 'zone_announce': {
+        const zoneIdx = game!.currentEventZoneIndex
+        const zone = EVENT_ZONE_ORDER[zoneIdx]
+        const config = ZONE_CONFIGS[zone]
+        const zoneState = game!.zones[zone]
+        const aliveCount = zoneState.characterIds.filter(id => game!.characters[id]?.isAlive).length
+        const defense = calcDefense(zone, game!)
+        const attacked = isUnderAttack(zone, game!)
+        const survivorEvent = !attacked ? determineSurvivorEvent(zone, game!) : null
+
+        return (
+          <div className="text-center">
+            <p className="text-xs text-zinc-500 mb-1">이벤트 ({zoneIdx + 1}/6)</p>
+            <p className="text-lg font-bold text-white mb-3">
+              #{config.zoneNumber} {config.displayName}
+            </p>
+            <div className="flex justify-center gap-4 mb-3 text-sm text-zinc-300">
+              <span>🧟 좀비 <strong className="text-white">{zoneState.zombies}</strong></span>
+              <span>👤 사람 <strong className="text-white">{aliveCount}</strong></span>
+              {config.defenseLimit > 0 && (
+                <span>🛡 방어 <strong className="text-white">{defense}</strong></span>
+              )}
+            </div>
+            {zoneState.zombies === 0 && aliveCount === 0 ? (
+              <p className="text-zinc-500 text-sm">사람도 좀비도 없습니다.</p>
+            ) : zoneState.zombies === 0 ? (
+              survivorEvent === 'sheriff' ? (
+                <p className="text-yellow-400 font-bold">👮 보안관 선출 투표를 진행합니다</p>
+              ) : survivorEvent === 'item_search' ? (
+                <p className="text-blue-400 font-bold">🎒 아이템 탐색 투표를 진행합니다</p>
+              ) : (
+                <p className="text-zinc-400 text-sm">좀비가 없습니다. 이상 없음.</p>
+              )
+            ) : attacked ? (
+              <p className="text-red-400 font-bold text-base">💀 좀비의 공세를 이겨내지 못하였습니다!</p>
+            ) : aliveCount > 0 ? (
+              <p className="text-green-400 font-bold text-base">🛡 좀비 방어에 성공하였습니다!</p>
+            ) : (
+              <p className="text-zinc-500 text-sm">사람이 없습니다.</p>
+            )}
+          </div>
+        )
+      }
+
       // ── 이벤트 처리 ─────────────────────────────────────────
       case 'event': {
-        const zone = EVENT_ZONE_ORDER[game!.currentEventZoneIndex]
-        return (
-          <p className="text-zinc-400 text-sm">
-            이벤트 처리 중: <span className="text-yellow-400 font-bold">{ZONE_CONFIGS[zone].displayName}</span>
-            <span className="text-zinc-600 text-xs ml-2">({game!.currentEventZoneIndex + 1}/6)</span>
-          </p>
-        )
+        return <p className="text-zinc-500 text-xs">이벤트 처리 중...</p>
       }
 
       // ── 투표 ────────────────────────────────────────────────
