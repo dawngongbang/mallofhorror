@@ -264,9 +264,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game))
   })()
 
-  // 내 미배치 캐릭터 목록
+  // 내 미배치 캐릭터 목록 (zone==='parking'이지만 아직 zones.parking.characterIds에 없는 것들)
   const myUnplacedChars = uid
-    ? Object.values(game.characters).filter(c => c.playerId === uid && c.isAlive && c.zone === 'parking')
+    ? Object.values(game.characters).filter(c =>
+        c.playerId === uid &&
+        c.isAlive &&
+        c.zone === 'parking' &&
+        !game.zones.parking.characterIds.includes(c.id)
+      )
     : []
 
   async function handleRollSetup() {
@@ -499,14 +504,23 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
-      // ── 주사위 결과 공개 ─────────────────────────────────────
+      // ── 주사위 결과 공개 (보안관만 확인 가능) ────────────────────
       case 'dice_reveal': {
+        // 보안관이 아니면 결과 숨김 (CCTV 아이템 미구현으로 추후 추가 예정)
+        if (uid !== sheriffId) {
+          return (
+            <div className="text-center">
+              <p className="text-zinc-400 text-sm">보안관이 주사위 결과를 확인 중...</p>
+              <p className="text-zinc-600 text-xs mt-1">잠시 후 이동 페이즈가 시작됩니다</p>
+            </div>
+          )
+        }
         const roll = game!.lastDiceRoll
         if (!roll) return <p className="text-zinc-400 text-sm">주사위 결과 로딩 중...</p>
         const { belleZone, mostCrowdedZone } = calcBonusZombies(game!)
         return (
           <div className="text-center">
-            <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과</p>
+            <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과 (보안관만 확인 가능)</p>
             <div className="flex justify-center gap-2 mb-3">
               {roll.dice.map((d, i) => (
                 <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">
@@ -533,7 +547,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 <p className="text-zinc-600">보너스 좀비 없음 (동률)</p>
               )}
             </div>
-            <p className="text-zinc-600 text-xs mt-3">잠시 후 좀비가 배치됩니다...</p>
+            <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
           </div>
         )
       }
@@ -650,7 +664,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </p>
             )}
             <div className="flex gap-2 flex-wrap">
-              {ZONE_ORDER.map(zone => (
+              {ZONE_ORDER.filter(zone => zone !== myMovingCharData?.zone).map(zone => (
                 <button key={zone} onClick={() => handleSealDestination(zone)} disabled={actionLoading}
                   className="bg-blue-700 hover:bg-blue-600 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
                   {ZONE_CONFIGS[zone].displayName}
