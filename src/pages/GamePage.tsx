@@ -1137,25 +1137,24 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             </div>
           )}
 
-          {/* 주사위 배너: 라운드 중 항상 표시. 실제 보안관만 값 공개 */}
+          {/* 주사위 배너: 라운드 중 항상 표시. 좀비 배치는 전원 공개, 주사위 눈은 정식보안관만 */}
           {game.lastDiceRoll && game.phase !== 'roll_dice' && game.phase !== 'dice_reveal' && game.phase !== 'setup_place' && (
             <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
-              <span className="text-yellow-600 text-xs font-bold">🎲 이번 라운드 주사위</span>
-              {uid === sheriffId && game.isRealSheriff ? (
-                <>
-                  <div className="flex gap-1">
-                    {game.lastDiceRoll.dice.map((d, i) => (
-                      <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
-                    {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
-                      <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <span className="text-zinc-600 text-xs">정식보안관이 없어 아무도 cctv를 확인하지 못했습니다</span>
+              <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
+              {uid === sheriffId && game.isRealSheriff && (
+                <div className="flex gap-1">
+                  {game.lastDiceRoll.dice.map((d, i) => (
+                    <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
+                {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
+                  <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
+                ))}
+              </div>
+              {!game.isRealSheriff && (
+                <span className="text-zinc-600 text-xs">· 정식보안관 없음</span>
               )}
             </div>
           )}
