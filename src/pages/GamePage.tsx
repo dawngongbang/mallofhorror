@@ -147,12 +147,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 victimId = loserCharsInZone[0]?.id
               }
             }
-            await hostResolveVote(roomCode, game, victimId)
+            const nextState = await hostResolveVote(roomCode, game, victimId)
+            // 투표 직후 event 페이즈 확정이므로 즉시 zone_announce 전환
+            // (processSignal 타이밍 의존 없이 확실하게 진행)
+            if (nextState.phase === 'event') {
+              await patchGameState(roomCode, { phase: 'zone_announce' })
+            }
           }
         }
       } finally {
         processingRef.current = false
-        // Firebase 업데이트가 processing 중에 도착했을 수 있으므로 강제 재실행
         setProcessSignal(s => s + 1)
       }
     }
