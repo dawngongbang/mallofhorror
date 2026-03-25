@@ -126,6 +126,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
     async function runHostStep() {
       if (!game || processingRef.current) return
+      console.log('[HOST] runHostStep phase:', game?.phase, 'processing:', processingRef.current)
       processingRef.current = true
       let didWork = false
       try {
@@ -166,29 +167,39 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
         // voting: 전원 투표 완료 → 결과 처리
         else if (game.phase === 'voting' && game.currentVote) {
-          const allVoted = game.currentVote.eligibleVoters.length > 0 &&
-            game.currentVote.eligibleVoters.every(id => game.currentVote!.status[id])
+          const cv = game.currentVote
+          console.log('[HOST] voting check — eligibleVoters:', cv.eligibleVoters, 'status:', cv.status)
+          const allVoted = cv.eligibleVoters.length > 0 &&
+            cv.eligibleVoters.every(id => cv.status[id])
+          console.log('[HOST] allVoted:', allVoted)
           if (allVoted) {
             let victimId: string | undefined
-            if (game.currentVote.type === 'zombie_attack') {
-              const result = calculateVoteResult(game.currentVote, game)
+            if (cv.type === 'zombie_attack') {
+              const result = calculateVoteResult(cv, game)
+              console.log('[HOST] zombie_attack result:', result)
               if (result.winner) {
                 const loserCharsInZone = Object.values(game.characters)
                   .filter(c =>
                     c.playerId === result.winner &&
                     c.isAlive &&
-                    game.zones[game.currentVote!.zone].characterIds.includes(c.id)
+                    game.zones[cv.zone].characterIds.includes(c.id)
                   )
                 victimId = loserCharsInZone[0]?.id
+                console.log('[HOST] victimId:', victimId)
               }
             }
+            console.log('[HOST] calling hostResolveVote')
             const nextState = await hostResolveVote(roomCode, game, victimId)
+            console.log('[HOST] hostResolveVote done, nextState.phase:', nextState.phase)
             if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
               await patchGameState(roomCode, { phase: 'zone_announce' })
+              console.log('[HOST] patched to zone_announce')
             }
             didWork = true
           }
         }
+      } catch (err) {
+        console.error('[HOST] runHostStep error:', err)
       } finally {
         processingRef.current = false
         // 실제로 작업을 수행한 경우에만 재실행 신호 (무한루프 방지)
@@ -1065,7 +1076,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   </div>
                 </>
               ) : (
-                <span className="text-zinc-600 text-xs">보안관만 확인 가능</span>
+                <span className="text-zinc-600 text-xs">정식보안관이 없어 아무도 cctv를 확인하지 못했습니다</span>
               )}
             </div>
           )}
