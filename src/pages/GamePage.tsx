@@ -409,8 +409,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const g = gameRef.current
       if (!g || g.phase !== 'voting' || !g.currentVote || !g.lastVoteAnnounce) return
       const cv = g.currentVote
-      // 공지 먼저 제거
-      await patchGameState(roomCode, { lastVoteAnnounce: null })
+      // ※ lastVoteAnnounce: null은 반드시 투표 처리 patchGameState와 동시에 적용해야 함
+      //   별도 await로 먼저 null 처리하면 runHostStep이 구 투표(status 모두 true)를 감지해 재설정하는 버그 발생
 
       if (cv.type === 'zombie_attack') {
         const result = calculateVoteResult(cv, g)
@@ -423,7 +423,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               await patchGameState(roomCode, { phase: 'zone_announce' })
             }
           } else {
-            await patchGameState(roomCode, { pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner } })
+            // pendingVictimSelection 설정과 동시에 announce 해제
+            await patchGameState(roomCode, { pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner }, lastVoteAnnounce: null })
           }
         } else {
           await hostResolveVote(roomCode, g, undefined)

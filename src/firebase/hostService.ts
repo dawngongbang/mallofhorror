@@ -162,7 +162,8 @@ export async function hostResolveVote(
       status: Object.fromEntries(nextEligibleVoters.map(id => [id, false])),
       bonusVoteWeights: {},
     }
-    await patchGameState(roomCode, { currentVote: nextVote, phaseDeadline: Date.now() + 60000 })
+    // lastVoteAnnounce: null을 동시에 적용 — 별도 await 시 runHostStep이 구 투표를 재감지하는 버그 방지
+    await patchGameState(roomCode, { currentVote: nextVote, phaseDeadline: Date.now() + 60000, lastVoteAnnounce: null })
     return { ...state, currentVote: nextVote }
   }
 
@@ -206,6 +207,7 @@ export async function hostResolveVote(
       itemSearchWinnerId: next.itemSearchWinnerId,
       itemSearchChoice: null,
       phase: 'event',
+      lastVoteAnnounce: null,
     })
   } else {
     // zombie_attack은 같은 구역 재처리, sheriff는 다음 구역으로
@@ -227,6 +229,7 @@ export async function hostResolveVote(
       currentEventZoneIndex: nextZoneIndex,
       phase: 'event',
       lastZombieAttackResult: next.lastZombieAttackResult ?? null,
+      lastVoteAnnounce: null,
     })
   }
 
