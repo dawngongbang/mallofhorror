@@ -148,11 +148,18 @@ export async function hostResolveVote(
 
   // 동률 → 재투표
   if (!result.winner) {
+    // 2차 동률(round >= 1)부터는 전체 생존 플레이어로 확대
+    const nextEligibleVoters = voteState.round >= 1
+      ? state.playerOrder.filter(pid =>
+          Object.values(state.characters).some(c => c.playerId === pid && c.isAlive)
+        )
+      : voteState.eligibleVoters
     const nextVote = {
       ...voteState,
       round: voteState.round + 1,
       votes: {},
-      status: Object.fromEntries(voteState.eligibleVoters.map(id => [id, false])),
+      eligibleVoters: nextEligibleVoters,
+      status: Object.fromEntries(nextEligibleVoters.map(id => [id, false])),
       bonusVoteWeights: {},
     }
     await patchGameState(roomCode, { currentVote: nextVote, phaseDeadline: Date.now() + 60000 })
