@@ -106,6 +106,7 @@ export function initRoundState(state: GameState): GameState {
     lastDiceRoll: null,
     itemSearchPreview: null,
     lastZombieAttackResult: null,
+    cctvViewers: [],
   }
 }
 

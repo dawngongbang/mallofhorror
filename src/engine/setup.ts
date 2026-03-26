@@ -89,6 +89,8 @@ export function createInitialGameState(
     lastVoteAnnounce: null,
     lastZombieAttackResult: null,
 
+    cctvViewers: [],
+
     winners: [],
     finalScores: {},
   }

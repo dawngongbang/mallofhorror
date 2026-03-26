@@ -5,6 +5,7 @@ import {
   selectVote, confirmVote,
   patchGameState, subscribeToMyItems, submitItemSearchChoice,
   submitSheriffRollRequest, submitVictimChoice,
+  useThreatItem, useCctvItem,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -16,6 +17,7 @@ import { calculateVoteResult, calcDefense, isUnderAttack } from '../engine/comba
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
 import { isZoneFull, calcBonusZombies } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
+import RulesModal from '../components/RulesModal'
 
 const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
 
@@ -100,6 +102,7 @@ function normalizeGame(g: GameState): GameState {
     pendingVictimSelection: g.pendingVictimSelection ?? null,
     lastVoteAnnounce:       g.lastVoteAnnounce       ?? null,
     lastZombieAttackResult: g.lastZombieAttackResult ?? null,
+    cctvViewers:            Array.isArray(g.cctvViewers) ? g.cctvViewers : [],
   }
 }
 
@@ -121,6 +124,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
   const processingRef = useRef(false)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [confirmingItem, setConfirmingItem] = useState<{ instanceId: string; itemId: string } | null>(null)
+  const [showRules, setShowRules] = useState(false)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -214,7 +219,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           if (allVoted) {
             const result = calculateVoteResult(cv, game)
             await patchGameState(roomCode, {
-              lastVoteAnnounce: { votes: cv.votes ?? {}, tally: result.tally },
+              lastVoteAnnounce: { votes: cv.votes ?? {}, tally: result.tally, bonusVoteWeights: cv.bonusVoteWeights ?? {} },
             })
             didWork = true
           }
@@ -530,6 +535,22 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     setActionLoading(true)
     await confirmVote(roomCode)
     setActionLoading(false)
+  }
+
+  // ── 아이템 사용 핸들러 ────────────────────────────────────────
+  async function handleUseItem(instanceId: string, itemId: string) {
+    if (actionLoading) return
+    setActionLoading(true)
+    try {
+      if (itemId === 'cctv') {
+        await useCctvItem(roomCode, instanceId, myItemIds)
+      } else if (itemId === 'threat') {
+        await useThreatItem(roomCode, instanceId, myItemIds)
+      }
+    } finally {
+      setConfirmingItem(null)
+      setActionLoading(false)
+    }
   }
 
   // ── 존 보드 ──────────────────────────────────────────────────
@@ -1238,17 +1259,34 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   const targetId = announce.votes[voterId]
                   const voterName = players[voterId]?.nickname ?? '?'
                   const targetName = targetId ? (players[targetId]?.nickname ?? '?') : '기권'
+                  const bonus = announce.bonusVoteWeights?.[voterId] ?? 0
                   return (
                     <div key={voterId} className="flex items-center gap-2 text-sm">
                       <span className={`font-medium ${voterId === uid ? 'text-blue-300' : 'text-zinc-300'}`}>
                         {voterName}
                       </span>
+                      {bonus > 0 && (
+                        <span className="text-xs text-orange-400 font-bold">😤 협박(+{bonus})</span>
+                      )}
                       <span className="text-zinc-600">→</span>
                       <span className={targetId ? 'text-red-300 font-medium' : 'text-zinc-500'}>{targetName}</span>
                     </div>
                   )
                 })}
               </div>
+
+              {/* 협박 아이템 사용 공지 */}
+              {Object.entries(announce.bonusVoteWeights ?? {}).some(([, v]) => v > 0) && (
+                <div className="mb-3 space-y-1">
+                  {Object.entries(announce.bonusVoteWeights ?? {})
+                    .filter(([, v]) => v > 0)
+                    .map(([pid, bonus]) => (
+                      <p key={pid} className="text-xs text-orange-400">
+                        😤 <span className="font-bold">{players[pid]?.nickname ?? '?'}님</span>이 협박 아이템으로 투표권 +{bonus}을 행사하였습니다.
+                      </p>
+                    ))}
+                </div>
+              )}
 
               {/* 최종 집계 */}
               {(() => {
@@ -1355,6 +1393,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
   // ── 렌더 ─────────────────────────────────────────────────────
   return (
+    <>
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800">
@@ -1371,6 +1410,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             보안관: <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
           </span>
           <span className="text-xs text-zinc-600">#{roomCode}</span>
+          <button onClick={() => setShowRules(true)} className="text-zinc-600 hover:text-white text-xs transition-colors">📖 설명서</button>
           <button onClick={async () => {
             if (isHost) await deleteRoom(roomCode)
             onLeave()
@@ -1393,11 +1433,23 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             </div>
           )}
 
-          {/* 주사위 배너: 이동 페이즈 중에는 정식보안관 본인만, 이동 완료 후 전체 공개 */}
+          {/* 주사위 배너: 이동 페이즈 중에는 정식보안관/CCTV 사용자만, 이동 완료 후 전체 공개 */}
           {game.lastDiceRoll && !['roll_dice', 'dice_reveal', 'setup_place'].includes(game.phase) && (() => {
             const isMovementPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game.phase)
             const iAmRealSheriff = uid === sheriffId && game.isRealSheriff
-            if (isMovementPhase && !iAmRealSheriff) return null
+            const iUsedCctv = uid ? game.cctvViewers.includes(uid) : false
+            const canSeeZones = iAmRealSheriff || iUsedCctv
+
+            // 이동 페이즈 중 정보 접근 불가한 경우
+            if (isMovementPhase && !canSeeZones) {
+              if (game.isRealSheriff) return null  // 정식보안관 있음 — 다른 플레이어는 숨김
+              return (
+                <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 flex items-center gap-3">
+                  <span className="text-yellow-600 text-xs font-bold">🎲 이번 라운드 주사위</span>
+                  <span className="text-zinc-600 text-xs">정식보안관이 없어 아무도 cctv를 확인하지 못했습니다</span>
+                </div>
+              )
+            }
             return (
               <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
                 <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
@@ -1408,11 +1460,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     ))}
                   </div>
                 )}
+                {iUsedCctv && !iAmRealSheriff && (
+                  <span className="text-purple-400 text-xs font-bold">📷 CCTV</span>
+                )}
                 <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
                   {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
                     <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
                   ))}
                 </div>
+                {!game.isRealSheriff && (
+                  <span className="text-zinc-600 text-xs">· 정식보안관 없음</span>
+                )}
               </div>
             )
           })()}
@@ -1431,13 +1489,43 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   const itemId = instanceIdToItemId(instanceId)
                   const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
                   if (!cfg) return null
+
+                  // 사용 가능한 아이템 여부
+                  const canUseCctv = itemId === 'cctv' && !!game.lastDiceRoll && !game.cctvViewers.includes(uid ?? '')
+                  const canUseThreat = itemId === 'threat' && game.phase === 'voting' && !!game.currentVote
+                  const isUsable = canUseCctv || canUseThreat
+
+                  const isConfirming = confirmingItem?.instanceId === instanceId
+
+                  if (isConfirming) {
+                    return (
+                      <div key={instanceId} className="flex items-center gap-1.5 bg-zinc-700 border border-yellow-600 rounded-lg px-2.5 py-1.5">
+                        <span className="text-xs text-yellow-300">{cfg.name} 사용?</span>
+                        <button onClick={() => handleUseItem(instanceId, itemId)} disabled={actionLoading}
+                          className="text-xs bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-2 py-0.5 rounded transition-colors">
+                          확인
+                        </button>
+                        <button onClick={() => setConfirmingItem(null)}
+                          className="text-xs text-zinc-400 hover:text-white px-1 transition-colors">
+                          취소
+                        </button>
+                      </div>
+                    )
+                  }
+
                   return (
-                    <div key={instanceId}
+                    <button key={instanceId}
                       title={cfg.description}
-                      className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg px-2.5 py-1.5 cursor-default transition-colors">
+                      onClick={() => isUsable && setConfirmingItem({ instanceId, itemId })}
+                      disabled={!isUsable}
+                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-colors ${
+                        isUsable
+                          ? 'bg-zinc-700 hover:bg-zinc-600 text-white cursor-pointer ring-1 ring-zinc-500'
+                          : 'bg-zinc-800 text-zinc-500 cursor-default'
+                      }`}>
                       <span className="text-sm">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
-                      <span className="text-xs font-medium text-white">{cfg.name}</span>
-                    </div>
+                      <span className="text-xs font-medium">{cfg.name}</span>
+                    </button>
                   )
                 })}
               </div>
@@ -1517,5 +1605,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       </div>
     </div>
+    {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+    </>
   )
 }

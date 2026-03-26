@@ -179,6 +179,74 @@ export async function submitVictimChoice(
   await set(ref(db, `games/${roomCode}/game/pendingVictimSelection/chosenCharacterId`), characterId)
 }
 
+// ── 플레이어 행동: 협박 아이템 사용 (투표 중) ────────────────
+// 현재 투표의 bonusVoteWeights에 +1, private items에서 제거
+
+export async function useThreatItem(
+  roomCode: string,
+  itemInstanceId: string,
+  currentItemIds: string[]
+): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+
+  const newItems = [...currentItemIds]
+  const idx = newItems.indexOf(itemInstanceId)
+  if (idx === -1) return
+  newItems.splice(idx, 1)
+
+  const gameRef = ref(db, `games/${roomCode}/game`)
+  const snap = await get(gameRef)
+  const g = snap.val() as GameState | null
+  if (!g) return
+
+  const prev = g.currentVote?.bonusVoteWeights?.[uid] ?? 0
+  const newCount = Math.max(0, (g.playerItemCounts?.[uid] ?? 1) - 1)
+
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),
+    update(ref(db, `games/${roomCode}/game`), {
+      [`currentVote/bonusVoteWeights/${uid}`]: prev + 1,
+      [`playerItemCounts/${uid}`]: newCount,
+    }),
+  ])
+}
+
+// ── 플레이어 행동: CCTV 아이템 사용 ─────────────────────────
+// 아무때나 사용 가능. 사용 시 이번 라운드 동안 보안관과 동일한 주사위 정보 공개
+
+export async function useCctvItem(
+  roomCode: string,
+  itemInstanceId: string,
+  currentItemIds: string[]
+): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+
+  // private items에서 해당 아이템 제거
+  const newItems = [...currentItemIds]
+  const idx = newItems.indexOf(itemInstanceId)
+  if (idx === -1) return
+  newItems.splice(idx, 1)
+
+  // 병렬: private items 갱신 + game state에 uid 추가 + 아이템 카운트 감소
+  const gameRef = ref(db, `games/${roomCode}/game`)
+  const snap = await get(gameRef)
+  const g = snap.val() as GameState | null
+  if (!g) return
+
+  const newViewers = Array.isArray(g.cctvViewers) ? [...g.cctvViewers, uid] : [uid]
+  const newCount = Math.max(0, (g.playerItemCounts?.[uid] ?? 1) - 1)
+
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),
+    update(ref(db, `games/${roomCode}/game`), {
+      cctvViewers: newViewers,
+      [`playerItemCounts/${uid}`]: newCount,
+    }),
+  ])
+}
+
 // ── 보안관 행동: 주사위 굴리기 요청 ──────────────────────────
 // 보안관(임시/정식)이 roll_dice 단계에서 호출 → 호스트가 감지 후 실제 굴리기 처리
 

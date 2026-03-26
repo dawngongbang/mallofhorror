@@ -240,8 +240,9 @@ export interface GameState {
 
   // 투표 결과 공지 (전원 확정 직후 N초간 표시 후 처리)
   lastVoteAnnounce: {
-    votes: Record<string, string>    // voterId → targetPlayerId
-    tally: Record<string, number>    // candidateId → 득표 수 (가중치 포함)
+    votes: Record<string, string>              // voterId → targetPlayerId
+    tally: Record<string, number>              // candidateId → 득표 수 (가중치 포함)
+    bonusVoteWeights: Record<string, number>   // playerId → 협박카드 보너스 (>0이면 사용한 것)
   } | null
 
   // 가장 최근 좀비 공격 사망 결과 (zone_announce에서 공지용)
@@ -250,6 +251,9 @@ export interface GameState {
     deadCharacterId: string
     deadPlayerId: string
   } | null
+
+  // 이번 라운드 CCTV 아이템을 사용한 플레이어 (라운드 시작 시 초기화)
+  cctvViewers: string[]
 
   // 결과
   winners: string[]

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import RulesModal from '../components/RulesModal'
 import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor, deleteRoom, updateRoomSettings } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { initPresence, startHeartbeat } from '../firebase/presenceService'
@@ -30,6 +31,7 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const [myReady, setMyReady] = useState(false)
   const [startError, setStartError] = useState('')
   const [starting, setStarting] = useState(false)
+  const [showRules, setShowRules] = useState(false)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -92,12 +94,15 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
             <h2 className="text-xl font-bold text-white">대기실</h2>
             <p className="text-zinc-500 text-xs mt-0.5">친구에게 코드를 알려주세요</p>
           </div>
-          <button onClick={async () => {
-            if (isHost) await deleteRoom(roomCode)
-            onLeave()
-          }} className="text-zinc-500 hover:text-white text-sm transition-colors">
-            나가기
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowRules(true)} className="text-zinc-500 hover:text-white text-sm transition-colors">📖</button>
+            <button onClick={async () => {
+              if (isHost) await deleteRoom(roomCode)
+              onLeave()
+            }} className="text-zinc-500 hover:text-white text-sm transition-colors">
+              나가기
+            </button>
+          </div>
         </div>
 
         {/* 방 코드 */}
@@ -232,6 +237,7 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
           )}
         </div>
       </div>
+    {showRules && <RulesModal onClose={() => setShowRules(false)} />}
     </div>
   )
 }

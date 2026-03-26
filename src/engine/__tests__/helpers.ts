@@ -50,6 +50,8 @@ export function createTestState(): GameState {
     pendingVictimSelection: null,
     lastVoteAnnounce: null,
     lastZombieAttackResult: null,
+    cctvViewers: [],
+
     winners: [],
     finalScores: {},
   }

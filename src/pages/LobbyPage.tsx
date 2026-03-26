@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createRoom, joinRoom } from '../firebase/roomService'
+import RulesModal from '../components/RulesModal'
 
 interface Props {
   onEnterRoom: (roomCode: string) => void
@@ -11,6 +12,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showRules, setShowRules] = useState(false)
 
   async function handleCreate() {
     if (!nickname.trim()) { setError('닉네임을 입력해주세요.'); return }
@@ -45,6 +47,10 @@ export default function LobbyPage({ onEnterRoom }: Props) {
       <div className="mb-10 text-center">
         <h1 className="text-4xl font-bold text-red-500 tracking-widest mb-1">MALL OF HORROR</h1>
         <p className="text-zinc-500 text-sm">온라인 멀티플레이어</p>
+        <div className="flex items-center justify-center gap-3 mt-1">
+          <p className="text-zinc-700 text-xs">v{__APP_VERSION__}</p>
+          <button onClick={() => setShowRules(true)} className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors">📖 게임 설명서</button>
+        </div>
       </div>
 
       <div className="w-full max-w-sm bg-zinc-900 rounded-2xl p-6 shadow-xl">
@@ -101,6 +107,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
           {loading ? '처리 중...' : tab === 'create' ? '방 만들기' : '입장하기'}
         </button>
       </div>
+    {showRules && <RulesModal onClose={() => setShowRules(false)} />}
     </div>
   )
 }
