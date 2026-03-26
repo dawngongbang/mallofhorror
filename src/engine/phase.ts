@@ -88,11 +88,13 @@ export function isEventPhaseComplete(state: GameState): boolean {
 
 // 라운드 시작 시 페이즈 데이터 초기화
 export function initRoundState(state: GameState): GameState {
-  // 보안관부터 시작하는 선언 순서 사전 설정
+  // 보안관부터 시작하는 선언 순서 — 살아있는 캐릭터가 있는 플레이어만 포함
   const sheriffFirst = [
     ...state.playerOrder.slice(state.sheriffIndex),
     ...state.playerOrder.slice(0, state.sheriffIndex),
-  ]
+  ].filter(pid =>
+    Object.values(state.characters).some(c => c.playerId === pid && c.isAlive)
+  )
   return {
     ...state,
     characterDeclarations: {},

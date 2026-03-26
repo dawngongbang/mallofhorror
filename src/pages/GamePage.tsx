@@ -162,22 +162,68 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           didWork = true
         }
 
-        // character_select: 전원 선언 완료 → destination_seal
+        // character_select: 연결 끊긴 플레이어 자동 선언
         else if (game.phase === 'character_select') {
-          const declared = Object.keys(game.characterDeclarations)
-          if (declared.length >= game.playerOrder.length) {
-            const sealMs = (meta?.settings.sealTime ?? 60) * 1000
-            await patchGameState(roomCode, { phase: 'destination_seal', phaseDeadline: Date.now() + sealMs })
-            didWork = true
+          const currentDeclarer = game.declarationOrder.find(pid => !game.characterDeclarations[pid])
+          if (currentDeclarer && players[currentDeclarer]?.isConnected === false) {
+            const firstChar = Object.values(game.characters).find(c => c.playerId === currentDeclarer && c.isAlive)
+            if (firstChar) {
+              const autoOrder = Object.keys(game.characterDeclarations).length
+              await patchGameState(roomCode, {
+                characterDeclarations: {
+                  ...game.characterDeclarations,
+                  [currentDeclarer]: { playerId: currentDeclarer, characterId: firstChar.id, order: autoOrder, declaredAt: Date.now() },
+                },
+              })
+              didWork = true
+            }
+          }
+          // 전원 선언 완료 → destination_seal (전멸 플레이어 제외)
+          else {
+            const alivePlayers = game.playerOrder.filter(pid =>
+              Object.values(game.characters).some(c => c.playerId === pid && c.isAlive)
+            )
+            const declared = Object.keys(game.characterDeclarations)
+            if (declared.length >= alivePlayers.length) {
+              const sealMs = (meta?.settings.sealTime ?? 60) * 1000
+              await patchGameState(roomCode, { phase: 'destination_seal', phaseDeadline: Date.now() + sealMs })
+              didWork = true
+            }
           }
         }
 
-        // destination_seal: 전원 봉인 완료 → 이동 계획 수립 (단계별 처리는 move_execute 에서)
+        // destination_seal: 연결 끊긴 플레이어 즉시 자동 확정
         else if (game.phase === 'destination_seal') {
-          const sealed = Object.values(game.destinationStatus).filter(Boolean).length
-          if (sealed >= game.playerOrder.length) {
-            await hostPrepareMovement(roomCode, game)
+          const alivePlayers = game.playerOrder.filter(pid =>
+            Object.values(game.characters).some(c => c.playerId === pid && c.isAlive)
+          )
+          const disconnectedUnsettled = alivePlayers.filter(pid =>
+            players[pid]?.isConnected === false && !game.destinationStatus[pid]
+          )
+          if (disconnectedUnsettled.length > 0) {
+            const statusPatch: Record<string, boolean> = {}
+            const sealedPatch: Record<string, unknown> = {}
+            for (const pid of disconnectedUnsettled) {
+              statusPatch[pid] = true
+              if (!game.sealedDestinations[pid]) {
+                const charId = game.characterDeclarations[pid]?.characterId
+                const char = charId ? game.characters[charId] : null
+                if (char) sealedPatch[pid] = { playerId: pid, targetZone: char.zone, submittedAt: Date.now() }
+              }
+            }
+            await patchGameState(roomCode, {
+              destinationStatus: { ...game.destinationStatus, ...statusPatch },
+              ...(Object.keys(sealedPatch).length > 0 ? { sealedDestinations: { ...game.sealedDestinations, ...sealedPatch } as typeof game.sealedDestinations } : {}),
+            })
             didWork = true
+          }
+          // 전원 봉인 완료 → 이동 계획 수립
+          else {
+            const sealed = Object.values(game.destinationStatus).filter(Boolean).length
+            if (sealed >= alivePlayers.length) {
+              await hostPrepareMovement(roomCode, game)
+              didWork = true
+            }
           }
         }
 
@@ -247,7 +293,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const statusPatch: Record<string, boolean> = {}
       const sealedPatch: Record<string, unknown> = {}
       let needsPatch = false
-      for (const playerId of g.playerOrder) {
+      const alivePlayers = g.playerOrder.filter(pid =>
+        Object.values(g.characters).some(c => c.playerId === pid && c.isAlive)
+      )
+      for (const playerId of alivePlayers) {
         if (!g.destinationStatus[playerId]) {
           statusPatch[playerId] = true
           needsPatch = true
@@ -779,7 +828,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       // ── 캐릭터 선언 (보안관부터 순서대로) ────────────────────
       case 'character_select': {
         const declaredCount = Object.keys(game!.characterDeclarations).length
-        const total = game!.playerOrder.length
+        const total = game!.declarationOrder.length  // 전멸 플레이어 제외된 수
 
         return (
           <div>
