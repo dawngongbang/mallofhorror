@@ -247,6 +247,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [showRules, setShowRules] = useState(false)
   const [hoveredCharId, setHoveredCharId] = useState<string | null>(null)
+  const [hoveredZone, setHoveredZone] = useState<ZoneName | null>(null)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -1154,17 +1155,33 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
     const pos = ZONE_MAP_POSITIONS[zoneName]
 
+    // destination_seal: 선택 가능한 구역 (이동 캐릭터 현재 구역 제외, 폐쇄 제외, 미확정)
+    const isMyTurnToSelect = game!.phase === 'character_select' && currentDeclarerId === uid && !myDeclaredCharId
+    const isDestSelectable = game!.phase === 'destination_seal'
+      && !myDestConfirmed
+      && zoneName !== myMovingCharData?.zone
+      && !zoneState.isClosed
+    const isSelectedDest = mySealedZone === zoneName
+    const isHoveredDest = hoveredZone === zoneName && isDestSelectable
+
     return (
       <div
         key={zoneName}
         style={{ left: pos.left, top: pos.top, width: pos.width ?? '29%' }}
+        onClick={isDestSelectable ? () => handleSelectDestination(zoneName) : undefined}
+        onMouseEnter={isDestSelectable ? () => setHoveredZone(zoneName) : undefined}
+        onMouseLeave={isDestSelectable ? () => setHoveredZone(null) : undefined}
         className={`absolute rounded-lg p-1.5 flex flex-col gap-1 text-xs backdrop-blur-sm transition-all z-10
+          ${isDestSelectable ? 'cursor-pointer' : ''}
           ${zoneState.isClosed
             ? 'bg-zinc-950/85 opacity-70 ring-1 ring-zinc-700'
-            : isVotingZone   ? 'bg-red-950/90 ring-2 ring-red-500 z-20'
-            : isWeaponZone   ? 'bg-orange-950/90 ring-2 ring-orange-400 z-20'
-            : isAnnounceZone ? 'bg-yellow-950/90 ring-2 ring-yellow-400 z-20'
-            : isEventZone    ? 'bg-zinc-900/90 ring-2 ring-yellow-600 z-20'
+            : isSelectedDest  ? 'bg-blue-950/90 ring-2 ring-blue-400 z-20'
+            : isHoveredDest   ? 'bg-blue-900/85 ring-2 ring-blue-400/70 z-20'
+            : isVotingZone    ? 'bg-red-950/90 ring-2 ring-red-500 z-20'
+            : isWeaponZone    ? 'bg-orange-950/90 ring-2 ring-orange-400 z-20'
+            : isAnnounceZone  ? 'bg-yellow-950/90 ring-2 ring-yellow-400 z-20'
+            : isEventZone     ? 'bg-zinc-900/90 ring-2 ring-yellow-600 z-20'
+            : isDestSelectable? 'bg-zinc-950/80 ring-1 ring-zinc-600 hover:ring-blue-500/70'
             : 'bg-zinc-950/80 ring-1 ring-zinc-700/60'}`}
       >
         {/* 구역명 + 상태 배지 */}
@@ -1208,11 +1225,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             const charConfig = CHARACTER_CONFIGS[char.characterId]
             const isMoving = game!.characterDeclarations[char.playerId]?.characterId === char.id
             const isHidden = !!(game!.hiddenCharacters?.[char.id])
+            const isMyChar = char.playerId === uid && char.isAlive && !isHidden
+            const isClickableChar = isMyTurnToSelect && isMyChar
             return (
               <div
                 key={char.id}
                 title={`${owner?.nickname ?? '?'} — ${charConfig?.name}${isHidden ? ' (숨음)' : ''}`}
+                onClick={isClickableChar ? (e) => { e.stopPropagation(); handleDeclareCharacter(char.id) } : undefined}
+                onMouseEnter={isClickableChar ? () => setHoveredCharId(char.id) : undefined}
+                onMouseLeave={isClickableChar ? () => setHoveredCharId(null) : undefined}
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-all
+                  ${isClickableChar ? 'cursor-pointer' : ''}
                   ${owner ? (COLOR_BG[owner.color] ?? 'bg-zinc-600') : 'bg-zinc-600'}
                   ${!char.isAlive ? 'opacity-20 text-white' : isHidden ? 'opacity-30 text-white border-dashed' : 'text-white'}
                   ${hoveredCharId === char.id ? 'scale-150 border-white shadow-lg z-10' : isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
@@ -1557,11 +1580,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               <>
                 <div className="flex gap-2 flex-wrap mb-3">
                   {ZONE_ORDER.filter(z => z !== myMovingCharData?.zone && !game!.zones[z].isClosed).map(zone => (
-                    <button key={zone} onClick={() => handleSelectDestination(zone)} disabled={actionLoading}
+                    <button key={zone}
+                      onClick={() => handleSelectDestination(zone)}
+                      onMouseEnter={() => setHoveredZone(zone)}
+                      onMouseLeave={() => setHoveredZone(null)}
+                      disabled={actionLoading}
                       className={`text-white text-sm px-3 py-1.5 rounded-lg transition-colors ${
                         mySealedZone === zone
-                          ? 'bg-yellow-600 ring-2 ring-yellow-400'
-                          : 'bg-zinc-700 hover:bg-blue-600'
+                          ? 'bg-blue-600 ring-2 ring-blue-400'
+                          : hoveredZone === zone
+                          ? 'bg-blue-700'
+                          : 'bg-zinc-700 hover:bg-blue-700'
                       }`}>
                       {ZONE_CONFIGS[zone].displayName}
                     </button>
