@@ -26,8 +26,8 @@ const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'secur
 const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: string }> = {
   security:    { left: '33%', top:  '8%' },   // 12시
   supermarket: { left: '64%', top: '28%' },   // 2시반
-  bathroom:    { left: '64%', top: '62%' },   // 4-5시
-  clothing:    { left: '33%', top: '76%' },   // 6-7시
+  bathroom:    { left: '64%', top: '68%' },   // 4-5시
+  clothing:    { left:  '5%', top: '72%' },   // 7시
   toy:         { left:  '3%', top: '30%' },   // 10시
   parking:     { left: '28%', top: '40%', width: '40%' }, // 중앙
 }
