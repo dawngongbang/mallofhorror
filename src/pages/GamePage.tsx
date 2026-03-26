@@ -24,12 +24,12 @@ const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'secur
 
 // 맵 이미지 위 구역 오버레이 위치 (컨테이너 기준 %)
 const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: string }> = {
-  security:    { left: '34%', top:  '1%' },
-  supermarket: { left: '63%', top:  '1%' },
-  bathroom:    { left: '69%', top: '50%' },
-  clothing:    { left: '44%', top: '72%' },
-  toy:         { left:  '2%', top: '42%' },
-  parking:     { left: '26%', top: '34%', width: '44%' },
+  toy:         { left:  '1%', top:  '3%' },   // 좌상단
+  security:    { left: '34%', top:  '1%' },   // 상단 중앙
+  supermarket: { left: '67%', top:  '3%' },   // 우상단
+  parking:     { left: '21%', top: '30%', width: '54%' }, // 중앙
+  clothing:    { left:  '1%', top: '67%' },   // 좌하단
+  bathroom:    { left: '67%', top: '67%' },   // 우하단
 }
 
 // instanceId 예: "hidden_card_0", "sprint_2", "axe_0" → itemId 추출
@@ -2105,7 +2105,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           {/* 맵 보드 */}
           <div className="relative w-full max-w-xl mx-auto aspect-square">
             <img
-              src="/map.jpg"
+              src={`${import.meta.env.BASE_URL}map.jpg`}
               alt="몰오브호러 맵"
               className="w-full h-full object-cover rounded-xl"
             />
