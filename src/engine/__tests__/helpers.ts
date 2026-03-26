@@ -48,6 +48,7 @@ export function createTestState(): GameState {
     cardReactionWindow: null,
     sheriffRollRequest: null,
     pendingVictimSelection: null,
+    lastZombieAttackResult: null,
     winners: [],
     finalScores: {},
   }

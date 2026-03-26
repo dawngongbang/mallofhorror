@@ -219,6 +219,7 @@ export async function hostResolveVote(
       itemSearchChoice: null,
       currentEventZoneIndex: nextZoneIndex,
       phase: 'event',
+      lastZombieAttackResult: next.lastZombieAttackResult ?? null,
     })
   }
 

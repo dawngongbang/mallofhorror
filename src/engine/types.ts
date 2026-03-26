@@ -238,6 +238,13 @@ export interface GameState {
     chosenCharacterId?: string   // 패배자가 선택 완료 시 기록
   } | null
 
+  // 가장 최근 좀비 공격 사망 결과 (zone_announce에서 공지용)
+  lastZombieAttackResult: {
+    zone: ZoneName
+    deadCharacterId: string
+    deadPlayerId: string
+  } | null
+
   // 결과
   winners: string[]
   finalScores: Record<string, number>

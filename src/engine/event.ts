@@ -75,6 +75,11 @@ export function applyZombieAttackResult(
         characterIds: state.zones[zone].characterIds.filter(id => id !== victimCharacterId),
       },
     },
+    lastZombieAttackResult: {
+      zone,
+      deadCharacterId: victimCharacterId,
+      deadPlayerId: character.playerId,
+    },
   }
 }
 

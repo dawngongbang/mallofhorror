@@ -96,6 +96,7 @@ function normalizeGame(g: GameState): GameState {
     currentVote:            normalizedVote,
     itemSearchPreview:      g.itemSearchPreview ? toArray(g.itemSearchPreview) : null,
     pendingVictimSelection: g.pendingVictimSelection ?? null,
+    lastZombieAttackResult: g.lastZombieAttackResult ?? null,
   }
 }
 
@@ -269,7 +270,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const g = gameRef.current
       if (!g || g.phase !== 'move_execute' || g.currentMoveStep !== step) return
       await hostApplyNextMoveStep(roomCode, g)
-    }, 1500)
+    }, 2000)
     return () => clearTimeout(timer)
   }, [game?.phase, game?.currentMoveStep, isHost, roomCode])
 
@@ -312,23 +313,24 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
-        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting' })
+        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', lastZombieAttackResult: null })
         return
       }
       const survivorState = startZoneSurvivorPhase(zone, g)
       if (survivorState) {
-        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting' })
+        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', lastZombieAttackResult: null })
         return
       }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
         await patchGameState(roomCode, {
           currentEventZoneIndex: nextZoneIndex,
           phase: 'event',
+          lastZombieAttackResult: null,
         })
       } else {
         await hostEndRound(roomCode, g)
       }
-    }, 2000)
+    }, 4000)
     return () => clearTimeout(timer)
   }, [game?.phase, game?.currentEventZoneIndex, zoneAnnounceZombies, isHost, roomCode])
 
@@ -841,6 +843,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         const defense = calcDefense(zone, game!)
         const attacked = isUnderAttack(zone, game!)
         const survivorEvent = !attacked ? determineSurvivorEvent(zone, game!) : null
+        const deathResult = game!.lastZombieAttackResult?.zone === zone ? game!.lastZombieAttackResult : null
 
         return (
           <div className="text-center">
@@ -849,6 +852,22 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               #{config.zoneNumber} {config.displayName}
               {zoneState.isClosed && <span className="ml-2 text-sm text-red-500">🔒 폐쇄</span>}
             </p>
+
+            {/* 사망 공지 */}
+            {deathResult && (() => {
+              const deadChar = game!.characters[deathResult.deadCharacterId]
+              const deadCharConf = deadChar ? CHARACTER_CONFIGS[deadChar.characterId] : null
+              const deadPlayerName = players[deathResult.deadPlayerId]?.nickname ?? deathResult.deadPlayerId
+              return (
+                <div className="bg-red-950 border border-red-700 rounded-lg px-3 py-2 mb-3 text-center">
+                  <p className="text-red-300 font-bold text-sm">
+                    💀 {deadPlayerName}의 {deadCharConf?.name ?? '캐릭터'}가 사망하였습니다.
+                  </p>
+                  <p className="text-zinc-400 text-xs mt-0.5">좀비들이 새로운 목표를 찾아 떠납니다.</p>
+                </div>
+              )
+            })()}
+
             <div className="flex justify-center gap-4 mb-3 text-sm text-zinc-300">
               <span>🧟 좀비 <strong className="text-white">{zoneState.zombies}</strong></span>
               <span>👤 사람 <strong className="text-white">{aliveCount}</strong></span>

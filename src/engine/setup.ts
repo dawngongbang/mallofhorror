@@ -86,6 +86,7 @@ export function createInitialGameState(
     cardReactionWindow: null,
     sheriffRollRequest: null,
     pendingVictimSelection: null,
+    lastZombieAttackResult: null,
 
     winners: [],
     finalScores: {},

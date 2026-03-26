@@ -105,6 +105,7 @@ export function initRoundState(state: GameState): GameState {
     currentVote: null,
     lastDiceRoll: null,
     itemSearchPreview: null,
+    lastZombieAttackResult: null,
   }
 }
 
