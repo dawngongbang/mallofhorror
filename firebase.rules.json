@@ -66,6 +66,37 @@
             },
             "status": {
               "$playerId": { ".write": "auth.uid === $playerId" }
+            },
+            "bonusVoteWeights": {
+              "$playerId": {
+                ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'voting'"
+              }
+            }
+          },
+
+          "playerItemCounts": {
+            "$playerId": { ".write": "auth.uid === $playerId" }
+          },
+
+          "cctvViewers": {
+            ".write": "auth != null"
+          },
+
+          "weaponUseStatus": {
+            "$playerId": {
+              ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use'"
+            }
+          },
+
+          "weaponKillChoices": {
+            "$playerId": {
+              ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use'"
+            }
+          },
+
+          "hiddenCharacters": {
+            "$charId": {
+              ".write": "auth != null && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use' && root.child('games').child($roomId).child('game/characters').child($charId).child('playerId').val() === auth.uid"
             }
           },
 
