@@ -91,6 +91,7 @@ export function createInitialGameState(
 
     cctvViewers: [],
     weaponUseStatus: {},
+    weaponKillChoices: {},
 
     winners: [],
     finalScores: {},

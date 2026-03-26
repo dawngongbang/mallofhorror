@@ -182,45 +182,45 @@ export async function submitVictimChoice(
 // ── 플레이어 행동: 무기 아이템 사용 (weapon_use 페이즈) ───────
 // 해당 구역 좀비 수 감소, private items에서 제거, weaponUseStatus 확정
 
-export async function useWeaponItem(
+// ── 플레이어 행동: weapon_use 확정 ───────────────────────────
+// 선택한 무기 목록과 총 kill 수를 기록 + 확정 상태 세팅
+// 좀비 실제 감소는 호스트가 전원 확정 후 일괄 적용
+
+export async function submitWeaponConfirm(
   roomCode: string,
-  itemInstanceId: string,
-  zone: ZoneName,
-  zombieKill: number,
+  stagedInstanceIds: string[],  // 사용하기로 선택한 무기 instanceId 목록
+  totalKill: number,            // 총 좀비 kill 수
   currentItemIds: string[]
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
 
-  const newItems = [...currentItemIds]
-  const idx = newItems.indexOf(itemInstanceId)
-  if (idx === -1) return
-  newItems.splice(idx, 1)
+  // 사용한 아이템을 인벤토리에서 제거
+  const newItems = currentItemIds.filter(id => !stagedInstanceIds.includes(id))
 
-  const gameRef = ref(db, `games/${roomCode}/game`)
-  const snap = await get(gameRef)
-  const g = snap.val() as GameState | null
-  if (!g) return
-
-  const currentZombies = g.zones?.[zone]?.zombies ?? 0
-  const newZombies = Math.max(0, currentZombies - zombieKill)
-  const newCount = Math.max(0, (g.playerItemCounts?.[uid] ?? 1) - 1)
+  const gameSnap = await get(ref(db, `games/${roomCode}/game/playerItemCounts/${uid}`))
+  const prevCount: number = gameSnap.val() ?? stagedInstanceIds.length
+  const newCount = Math.max(0, prevCount - stagedInstanceIds.length)
 
   await Promise.all([
     set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),
     update(ref(db, `games/${roomCode}/game`), {
-      [`zones/${zone}/zombies`]: newZombies,
+      [`weaponKillChoices/${uid}`]: totalKill,
       [`playerItemCounts/${uid}`]: newCount,
+      [`weaponUseStatus/${uid}`]: true,
     }),
   ])
 }
 
-// ── 플레이어 행동: weapon_use 패스 (무기 사용 안 함 확정) ────────
+// ── 플레이어 행동: weapon_use 패스 (무기 없이 확정) ─────────────
 
 export async function submitWeaponUsePass(roomCode: string): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
-  await set(ref(db, `games/${roomCode}/game/weaponUseStatus/${uid}`), true)
+  await update(ref(db, `games/${roomCode}/game`), {
+    [`weaponKillChoices/${uid}`]: 0,
+    [`weaponUseStatus/${uid}`]: true,
+  })
 }
 
 // ── 플레이어 행동: 협박 아이템 사용 (투표 중) ────────────────

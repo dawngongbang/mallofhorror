@@ -256,8 +256,11 @@ export interface GameState {
   // 이번 라운드 CCTV 아이템을 사용한 플레이어 (라운드 시작 시 초기화)
   cctvViewers: string[]
 
-  // weapon_use 페이즈: 해당 구역에서 무기 사용 또는 패스 확정한 플레이어 (weapon_use 진입 시 초기화)
+  // weapon_use 페이즈: 해당 구역에서 확정 완료한 플레이어 (weapon_use 진입 시 초기화)
   weaponUseStatus: Record<string, boolean>
+
+  // weapon_use 페이즈: 플레이어별 무기 kill 수 (확정 시 기록, 호스트가 전원 확정 후 일괄 적용)
+  weaponKillChoices: Record<string, number>
 
   // 결과
   winners: string[]
