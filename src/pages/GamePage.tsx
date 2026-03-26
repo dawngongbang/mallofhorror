@@ -38,30 +38,57 @@ function getZoneCenter(zoneName: ZoneName): { x: number; y: number } {
   const w = parseFloat(pos.width ?? '29')
   return {
     x: parseFloat(pos.left) + w / 2,
-    y: parseFloat(pos.top) + 8,  // 카드 높이 절반 근사치
+    y: parseFloat(pos.top) + 8,
   }
 }
 
+// 플레이어 스폰 위치 (맵 아래쪽에 플레이어별로 배치)
+function getPlayerSpawnPos(playerIndex: number): { x: number; y: number } {
+  const positions = [
+    { x: 15, y: 93 },
+    { x: 50, y: 96 },
+    { x: 82, y: 93 },
+    { x:  5, y: 60 },
+    { x: 92, y: 60 },
+  ]
+  return positions[playerIndex % positions.length] ?? { x: 50, y: 93 }
+}
+
+const COLOR_BG_TOKEN: Record<string, string> = {
+  red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
+  yellow: 'bg-yellow-400', purple: 'bg-purple-500', orange: 'bg-orange-500',
+}
+
+const CHAR_ICON: Record<string, string> = {
+  gunman:   '🔫',
+  belle:    '👩',
+  toughguy: '💪',
+  kid:      '🍬',
+}
+
 interface MovingTokenProps {
-  fromZone: ZoneName
+  fromPos: { x: number; y: number }
   toZone: ZoneName
+  bounceZone?: ZoneName   // 꽉 차서 주차장으로 튕기는 경우 중간 경유 구역
   color: string
   label: string
 }
 
-function MovingToken({ fromZone, toZone, color, label }: MovingTokenProps) {
-  const [pos, setPos] = useState(getZoneCenter(fromZone))
+function MovingToken({ fromPos, toZone, bounceZone, color, label }: MovingTokenProps) {
+  const [pos, setPos] = useState(fromPos)
 
   useEffect(() => {
-    // 한 프레임 후 목적지로 이동 시작
-    const t = setTimeout(() => setPos(getZoneCenter(toZone)), 30)
-    return () => clearTimeout(t)
-  }, [toZone])
-
-  const COLOR_BG_TOKEN: Record<string, string> = {
-    red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
-    yellow: 'bg-yellow-400', purple: 'bg-purple-500', orange: 'bg-orange-500',
-  }
+    if (bounceZone) {
+      // 1단계: 의도한 구역으로 이동
+      const t1 = setTimeout(() => setPos(getZoneCenter(bounceZone)), 30)
+      // 2단계: 주차장으로 튕기기
+      const t2 = setTimeout(() => setPos(getZoneCenter(toZone)), 900)
+      return () => { clearTimeout(t1); clearTimeout(t2) }
+    } else {
+      const t = setTimeout(() => setPos(getZoneCenter(toZone)), 30)
+      return () => clearTimeout(t)
+    }
+  }, [])
 
   return (
     <div
@@ -70,7 +97,7 @@ function MovingToken({ fromZone, toZone, color, label }: MovingTokenProps) {
         left: `${pos.x}%`,
         top: `${pos.y}%`,
         transform: 'translate(-50%, -50%)',
-        transition: 'left 0.85s cubic-bezier(0.4, 0, 0.2, 1), top 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'left 0.8s cubic-bezier(0.4, 0, 0.2, 1), top 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
         zIndex: 50,
         pointerEvents: 'none',
       }}
@@ -213,9 +240,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const processingRef = useRef(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   // 이동 애니메이션
-  interface MovingTokenState { uid: string; playerId: string; fromZone: ZoneName; toZone: ZoneName; label: string }
+  interface MovingTokenState {
+    uid: string; playerId: string
+    fromPos: { x: number; y: number }
+    toZone: ZoneName
+    bounceZone?: ZoneName
+    label: string
+  }
   const [movingTokens, setMovingTokens] = useState<MovingTokenState[]>([])
-  const prevCharZones = useRef<Record<string, ZoneName>>({})
+  const [transitCharIds, setTransitCharIds] = useState<Set<string>>(new Set())
+  const prevCharZones = useRef<Record<string, string>>({})
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [showRules, setShowRules] = useState(false)
   const uid = getCurrentUid()
@@ -235,27 +269,56 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const prev = prevCharZones.current
     const initialized = Object.keys(prev).length > 0
     const newTokens: MovingTokenState[] = []
+    const newTransitIds: string[] = []
 
     for (const [charId, char] of Object.entries(chars)) {
-      const prevZone = prev[charId]
-      if (initialized && prevZone && prevZone !== char.zone && char.isAlive) {
+      const prevZoneStr = prev[charId]
+      const toZone = char.zone as ZoneName
+      if (initialized && char.isAlive && prevZoneStr !== char.zone) {
         const charConfig = CHARACTER_CONFIGS[char.characterId]
+        const label = CHAR_ICON[char.characterId] ?? charConfig?.name?.charAt(0) ?? '?'
+        const playerIndex = game.playerOrder.indexOf(char.playerId)
+
+        // 이전 존이 맵에 있는 존이면 거기서 출발, 없으면(초기 배치 등) 플레이어 스폰 위치
+        const fromPos = prevZoneStr && ZONE_MAP_POSITIONS[prevZoneStr as ZoneName]
+          ? getZoneCenter(prevZoneStr as ZoneName)
+          : getPlayerSpawnPos(playerIndex)
+
+        // 스프린트 바운스: 주차장으로 갔는데 이전 구역도 주차장이 아닌 경우,
+        // pendingSprintChoices에서 의도한 목적지 찾기
+        let bounceZone: ZoneName | undefined
+        if (toZone === 'parking' && prevZoneStr && prevZoneStr !== 'parking') {
+          // 이 캐릭터를 선택한 스프린트 choice에서 의도 목적지 추출
+          const sprintChoice = Object.values(game.pendingSprintChoices ?? {}).find(
+            (c: { charId: string; targetZone: ZoneName }) => c.charId === charId && c.targetZone !== 'parking'
+          ) as { charId: string; targetZone: ZoneName } | undefined
+          if (sprintChoice) bounceZone = sprintChoice.targetZone
+        }
+
         newTokens.push({
           uid: `${charId}_${Date.now()}`,
           playerId: char.playerId,
-          fromZone: prevZone,
-          toZone: char.zone as ZoneName,
-          label: charConfig?.name?.charAt(0) ?? '?',
+          fromPos,
+          toZone,
+          bounceZone,
+          label,
         })
+        newTransitIds.push(charId)
       }
-      prev[charId] = char.zone as ZoneName
+      prev[charId] = char.zone
     }
 
     if (newTokens.length > 0) {
+      setTransitCharIds(p => new Set([...p, ...newTransitIds]))
       setMovingTokens(p => [...p, ...newTokens])
+      // 애니메이션 종료 후 목적지에 캐릭터 표시
+      const totalDuration = newTokens.some(t => t.bounceZone) ? 1750 : 950
+      setTimeout(() => {
+        setTransitCharIds(p => { const n = new Set(p); newTransitIds.forEach(id => n.delete(id)); return n })
+      }, totalDuration)
       setTimeout(() => {
         setMovingTokens(p => p.filter(t => !newTokens.find(n => n.uid === t.uid)))
-      }, 1300)
+      }, totalDuration + 200)
     }
   }, [game?.characters])
 
@@ -1077,7 +1140,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   function renderZone(zoneName: ZoneName) {
     const zoneState = game!.zones[zoneName]
     const config = ZONE_CONFIGS[zoneName]
-    const chars = zoneState.characterIds.map(id => game!.characters[id]).filter(Boolean)
+    const chars = zoneState.characterIds.map(id => game!.characters[id]).filter(Boolean).filter(c => !transitCharIds.has(c.id))
     const activeEventZone = EVENT_ZONE_ORDER[game!.currentEventZoneIndex]
     const isVotingZone = game!.phase === 'voting' && game!.currentVote?.zone === zoneName
     const isWeaponZone = game!.phase === 'weapon_use' && activeEventZone === zoneName
@@ -1159,7 +1222,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   ${!char.isAlive ? 'opacity-20 text-white' : isHidden ? 'opacity-30 text-white border-dashed' : 'text-white'}
                   ${isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
               >
-                {isHidden ? '🫥' : (charConfig?.name?.charAt(0) ?? '?')}
+                {isHidden ? '🫥' : (CHAR_ICON[char.characterId] ?? charConfig?.name?.charAt(0) ?? '?')}
               </div>
             )
           })}
@@ -2206,8 +2269,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               return (
                 <MovingToken
                   key={t.uid}
-                  fromZone={t.fromZone}
+                  fromPos={t.fromPos}
                   toZone={t.toZone}
+                  bounceZone={t.bounceZone}
                   color={owner?.color ?? 'zinc'}
                   label={t.label}
                 />
