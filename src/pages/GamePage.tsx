@@ -15,7 +15,7 @@ import { rollAndGetPlacementOptions, placeCharacter, startFirstRound } from '../
 import { startZoneAttackPhase, startZoneSurvivorPhase, determineSurvivorEvent, checkAndCloseZone } from '../engine/event'
 import { calculateVoteResult, calcDefense, isUnderAttack } from '../engine/combat'
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
-import { isZoneFull, calcBonusZombies } from '../engine/dice'
+import { isZoneFull } from '../engine/dice'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
 import RulesModal from '../components/RulesModal'
 
@@ -856,7 +856,6 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         }
         const roll = game!.lastDiceRoll
         if (!roll) return <p className="text-zinc-400 text-sm">주사위 결과 로딩 중...</p>
-        const { belleZone, mostCrowdedZone } = calcBonusZombies(game!)
         return (
           <div className="text-center">
             <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과 (보안관만 확인 가능)</p>
@@ -875,17 +874,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 </span>
               ))}
             </div>
-            <div className="text-xs space-y-1 text-zinc-400">
-              {mostCrowdedZone && (
-                <p>👥 사람 가장 많은 곳: <span className="text-white font-bold">{ZONE_CONFIGS[mostCrowdedZone].displayName}</span> → 좀비 +1</p>
-              )}
-              {belleZone && (
-                <p>💃 미녀 가장 많은 곳: <span className="text-white font-bold">{ZONE_CONFIGS[belleZone].displayName}</span> → 좀비 +1</p>
-              )}
-              {!mostCrowdedZone && !belleZone && (
-                <p className="text-zinc-600">보너스 좀비 없음 (동률)</p>
-              )}
-            </div>
+            <p className="text-zinc-500 text-xs">보너스 좀비(사람/미녀 최다)는 이동 완료 후 결정됩니다</p>
             <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
           </div>
         )
@@ -1677,6 +1666,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   // 사용 가능한 아이템 여부
                   const canUseCctv = itemId === 'cctv' && !!game.lastDiceRoll && !game.cctvViewers.includes(uid ?? '')
                   const canUseThreat = itemId === 'threat' && game.phase === 'voting' && !!game.currentVote
+                    && !!uid && game.currentVote.eligibleVoters.includes(uid)
                   const weaponItemIds = ['axe', 'pistol', 'shotgun', 'bat', 'grenade', 'chainsaw']
                   const amInWeaponZone = game.phase === 'weapon_use' && (() => {
                     const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
