@@ -291,6 +291,17 @@ export interface GameState {
     entries: Array<{ playerId: string; zone: ZoneName }>
   } | null
 
+  // weapon_use 페이즈: 스프린트 아이템 대기 중 (playerId → { charId, targetZone }, 전원 확정 후 호스트가 이동 적용)
+  pendingSprintChoices: Record<string, { charId: string; targetZone: ZoneName }>
+
+  // weapon_use 페이즈: 하드웨어 아이템 대기 중 (playerId → 사용 장 수)
+  pendingHardwareChoices: Record<string, number>
+
+  // 스프린트 공지 (weapon_use 종료 직후)
+  lastSprintAnnounce: {
+    entries: Array<{ playerId: string; charId: string; fromZone: ZoneName; toZone: ZoneName }>
+  } | null
+
   // weapon_use 결과 공지 (아이템 사용 타임 종료 후 N초간 표시)
   lastWeaponUseAnnounce: {
     zone: ZoneName

@@ -101,6 +101,20 @@
             }
           },
 
+          "pendingSprintChoices": {
+            "$playerId": {
+              ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+              ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use'"
+            }
+          },
+
+          "pendingHardwareChoices": {
+            "$playerId": {
+              ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+              ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use'"
+            }
+          },
+
           "zombiePlayerZoneChoices": {
             "$playerId": {
               ".write": "auth.uid === $playerId && (root.child('games').child($roomId).child('game/phase').val() === 'roll_dice' || root.child('games').child($roomId).child('game/phase').val() === 'dice_reveal')"

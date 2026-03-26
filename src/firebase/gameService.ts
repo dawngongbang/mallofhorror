@@ -191,12 +191,14 @@ export async function submitWeaponConfirm(
   stagedInstanceIds: string[],  // 사용하기로 선택한 무기 instanceId 목록
   totalKill: number,            // 총 좀비 kill 수
   currentItemIds: string[],
-  hideCharId?: string | null    // 숨기 아이템으로 숨길 캐릭터 ID (없으면 null)
+  hideCharId?: string | null,
+  sprintChoice?: { charId: string; targetZone: ZoneName } | null,
+  hardwareCount?: number
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
 
-  // 사용한 아이템을 인벤토리에서 제거 (무기 + 숨기 아이템 포함)
+  // 사용한 아이템을 인벤토리에서 제거 (무기 + 숨기 + 스프린트 + 하드웨어 포함)
   const allUsed = [...stagedInstanceIds]
   const newItems = currentItemIds.filter(id => !allUsed.includes(id))
 
@@ -209,9 +211,9 @@ export async function submitWeaponConfirm(
     [`playerItemCounts/${uid}`]: newCount,
     [`weaponUseStatus/${uid}`]: true,
   }
-  // 숨기 아이템: hiddenCharacters에 직접 쓰지 않고 pendingHideChoices에 기록
-  // 호스트가 weapon_use 전원 확정 후 hiddenCharacters로 이동 → 다른 플레이어에게 비공개 유지
   if (hideCharId) gamePatch[`pendingHideChoices/${uid}`] = hideCharId
+  if (sprintChoice) gamePatch[`pendingSprintChoices/${uid}`] = sprintChoice
+  if (hardwareCount) gamePatch[`pendingHardwareChoices/${uid}`] = hardwareCount
 
   await Promise.all([
     set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),

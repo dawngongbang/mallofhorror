@@ -41,11 +41,12 @@ export function checkAndCloseZone(zone: ZoneName, state: GameState): GameState |
 // 좀비 공격 투표 시작 (공격 중이 아니면 null 반환)
 export function startZoneAttackPhase(
   zone: ZoneName,
-  state: GameState
+  state: GameState,
+  hardwareBonus: number = 0
 ): GameState | null {
   if (state.zones[zone].isClosed) return null  // 폐쇄 구역은 이벤트 없음
   if (!hasAliveCharacters(zone, state)) return null
-  if (!isUnderAttack(zone, state)) return null
+  if (!isUnderAttack(zone, state, hardwareBonus)) return null
 
   const voteState = createVoteState(zone, 'zombie_attack', state)
   return { ...state, currentVote: voteState, phase: 'voting' }

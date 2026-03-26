@@ -22,6 +22,16 @@ import RulesModal from '../components/RulesModal'
 
 const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
 
+// 맵 이미지 위 구역 오버레이 위치 (컨테이너 기준 %)
+const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: string }> = {
+  security:    { left: '34%', top:  '1%' },
+  supermarket: { left: '63%', top:  '1%' },
+  bathroom:    { left: '69%', top: '50%' },
+  clothing:    { left: '44%', top: '72%' },
+  toy:         { left:  '2%', top: '42%' },
+  parking:     { left: '26%', top: '34%', width: '44%' },
+}
+
 // instanceId 예: "hidden_card_0", "sprint_2", "axe_0" → itemId 추출
 function instanceIdToItemId(instanceId: string): string {
   const parts = instanceId.split('_')
@@ -109,7 +119,10 @@ function normalizeGame(g: GameState): GameState {
     weaponUseStatus:        (g.weaponUseStatus && typeof g.weaponUseStatus === 'object') ? g.weaponUseStatus : {},
     weaponKillChoices:      (g.weaponKillChoices && typeof g.weaponKillChoices === 'object') ? g.weaponKillChoices : {},
     pendingHideChoices:     (g.pendingHideChoices && typeof g.pendingHideChoices === 'object') ? g.pendingHideChoices : {},
+    pendingSprintChoices:   (g.pendingSprintChoices && typeof g.pendingSprintChoices === 'object') ? g.pendingSprintChoices : {},
+    pendingHardwareChoices: (g.pendingHardwareChoices && typeof g.pendingHardwareChoices === 'object') ? g.pendingHardwareChoices : {},
     hiddenCharacters:       (g.hiddenCharacters && typeof g.hiddenCharacters === 'object') ? g.hiddenCharacters : {},
+    lastSprintAnnounce:     g.lastSprintAnnounce ?? null,
     lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
     lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce
                               ? { ...g.lastWeaponUseAnnounce, killsByPlayer: g.lastWeaponUseAnnounce.killsByPlayer ?? {} }
@@ -136,6 +149,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   // weapon_use 페이즈: 숨기 아이템 선택 상태 (instanceId, 숨길 charId)
   const [stagedHideItemId, setStagedHideItemId] = useState<string | null>(null)
   const [stagedHideCharId, setStagedHideCharId] = useState<string | null>(null)
+  // weapon_use 페이즈: 스프린트 아이템 선택 상태 (instanceId, 이동할 charId, 목적지 zone)
+  const [stagedSprintItemId, setStagedSprintItemId] = useState<string | null>(null)
+  const [stagedSprintCharId, setStagedSprintCharId] = useState<string | null>(null)
+  const [stagedSprintTargetZone, setStagedSprintTargetZone] = useState<ZoneName | null>(null)
+  // weapon_use 페이즈: 하드웨어 아이템 선택 상태 (instanceId)
+  const [stagedHardwareItemId, setStagedHardwareItemId] = useState<string | null>(null)
   const gameRef = useRef<GameState | null>(null)
   gameRef.current = game  // 항상 최신 game 참조 (stale closure 방지)
   // 트럭 수색 아이템 선택 상태
@@ -162,6 +181,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       setStagedWeapons(new Set())
       setStagedHideItemId(null)
       setStagedHideCharId(null)
+      setStagedSprintItemId(null)
+      setStagedSprintCharId(null)
+      setStagedSprintTargetZone(null)
+      setStagedHardwareItemId(null)
     }
   }, [game?.phase])
 
@@ -274,17 +297,47 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           if (allConfirmed) {
             const nextZoneIndex = game.currentEventZoneIndex + 1
             const voteMs = (meta?.settings.votingTime ?? 60) * 1000
-            // 무기 kill 합산 후 일괄 적용
+
+            // ── 스프린트: 캐릭터 이동 먼저 처리 ──
+            const pendingSprints = game.pendingSprintChoices ?? {}
+            type SprintEntry = { playerId: string; charId: string; fromZone: ZoneName; toZone: ZoneName }
+            const sprintEntries: SprintEntry[] = []
+            let sprintZones = { ...game.zones }
+            let sprintChars = { ...game.characters }
+            for (const [pid, choice] of Object.entries(pendingSprints)) {
+              const { charId, targetZone } = choice as { charId: string; targetZone: ZoneName }
+              const char = sprintChars[charId]
+              if (!char || !char.isAlive) continue
+              const fromZone = char.zone as ZoneName
+              const tgtState = sprintZones[targetZone]
+              const tgtConfig = ZONE_CONFIGS[targetZone]
+              const actualTarget: ZoneName = tgtState.characterIds.length < tgtConfig.maxCapacity ? targetZone : 'parking'
+              sprintZones = {
+                ...sprintZones,
+                [fromZone]: { ...sprintZones[fromZone], characterIds: sprintZones[fromZone].characterIds.filter(id => id !== charId) },
+                [actualTarget]: { ...sprintZones[actualTarget], characterIds: [...sprintZones[actualTarget].characterIds, charId] },
+              }
+              sprintChars = { ...sprintChars, [charId]: { ...char, zone: actualTarget } }
+              sprintEntries.push({ playerId: pid, charId, fromZone, toZone: actualTarget })
+            }
+            const sprintAnnounce = sprintEntries.length > 0 ? { entries: sprintEntries } : null
+
+            // ── 하드웨어: 방어 보너스 합산 ──
+            const hardwareBonus = Object.values(game.pendingHardwareChoices ?? {}).reduce((a, b) => a + b, 0)
+
+            // ── 무기 kill 합산 ──
             const killChoices = game.weaponKillChoices ?? {}
             const totalKill = Object.values(killChoices).reduce((a, b) => a + b, 0)
-            const prevZombies = game.zones[zone].zombies
+            const prevZombies = sprintZones[zone].zombies
             const newZombies = Math.max(0, prevZombies - totalKill)
             const updatedGame = {
               ...game,
-              zones: { ...game.zones, [zone]: { ...game.zones[zone], zombies: newZombies } },
+              zones: { ...sprintZones, [zone]: { ...sprintZones[zone], zombies: newZombies } },
+              characters: sprintChars,
               weaponKillChoices: {},
             }
-            // 무기 사용 공지 (무기를 실제로 사용했을 때만)
+
+            // ── 공지 준비 ──
             const killsByPlayer: Record<string, number> = {}
             for (const [pid, k] of Object.entries(killChoices)) {
               if (k > 0) killsByPlayer[pid] = k
@@ -292,27 +345,25 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             const weaponAnnounce = totalKill > 0
               ? { zone, killsByPlayer, totalKill, remainingZombies: newZombies }
               : null
-            // 숨기 아이템 공지 (hide announce) — pendingHideChoices에서 읽음
             const pendingHides = game.pendingHideChoices ?? {}
             const hiddenEntries = Object.entries(pendingHides).map(([pid, charId]) => ({
-              playerId: pid,
-              charId,
-              zone,
+              playerId: pid, charId, zone,
             })).filter(e => game.characters[e.charId])
-            const newHiddenChars = Object.fromEntries(
-              Object.values(pendingHides).map(charId => [charId, true])
-            )
-            const hideAnnounce = hiddenEntries.length > 0
-              ? { type: 'hide' as const, entries: hiddenEntries }
-              : null
+            const newHiddenChars = Object.fromEntries(Object.values(pendingHides).map(charId => [charId, true]))
+            const hideAnnounce = hiddenEntries.length > 0 ? { type: 'hide' as const, entries: hiddenEntries } : null
+
             await patchGameState(roomCode, {
               zones: updatedGame.zones,
+              characters: updatedGame.characters,
               weaponKillChoices: {},
               pendingHideChoices: {},
+              pendingSprintChoices: {},
+              pendingHardwareChoices: {},
               ...(weaponAnnounce ? { lastWeaponUseAnnounce: weaponAnnounce } : {}),
               ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenChars } : {}),
+              ...(sprintAnnounce ? { lastSprintAnnounce: sprintAnnounce } : {}),
             })
-            const attackState = startZoneAttackPhase(zone, updatedGame)
+            const attackState = startZoneAttackPhase(zone, updatedGame, hardwareBonus)
             if (attackState) {
               await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
             } else {
@@ -442,13 +493,39 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const zone = EVENT_ZONE_ORDER[g.currentEventZoneIndex]
       const nextZoneIndex = g.currentEventZoneIndex + 1
       const voteMs = (meta?.settings.votingTime ?? 60) * 1000
-      // 무기 kill 합산 후 일괄 적용
+      // ── 스프린트 처리 ──
+      const pendingSprintsG = g.pendingSprintChoices ?? {}
+      type SprintEntryG = { playerId: string; charId: string; fromZone: ZoneName; toZone: ZoneName }
+      const sprintEntriesG: SprintEntryG[] = []
+      let sprintZonesG = { ...g.zones }
+      let sprintCharsG = { ...g.characters }
+      for (const [pid, choice] of Object.entries(pendingSprintsG)) {
+        const { charId, targetZone } = choice as { charId: string; targetZone: ZoneName }
+        const char = sprintCharsG[charId]
+        if (!char || !char.isAlive) continue
+        const fromZone = char.zone as ZoneName
+        const tgtState = sprintZonesG[targetZone]
+        const tgtConfig = ZONE_CONFIGS[targetZone]
+        const actualTarget: ZoneName = tgtState.characterIds.length < tgtConfig.maxCapacity ? targetZone : 'parking'
+        sprintZonesG = {
+          ...sprintZonesG,
+          [fromZone]: { ...sprintZonesG[fromZone], characterIds: sprintZonesG[fromZone].characterIds.filter(id => id !== charId) },
+          [actualTarget]: { ...sprintZonesG[actualTarget], characterIds: [...sprintZonesG[actualTarget].characterIds, charId] },
+        }
+        sprintCharsG = { ...sprintCharsG, [charId]: { ...char, zone: actualTarget } }
+        sprintEntriesG.push({ playerId: pid, charId, fromZone, toZone: actualTarget })
+      }
+      const sprintAnnounceG = sprintEntriesG.length > 0 ? { entries: sprintEntriesG } : null
+      // ── 하드웨어 보너스 ──
+      const hardwareBonusG = Object.values(g.pendingHardwareChoices ?? {}).reduce((a, b) => a + b, 0)
+      // ── 무기 kill 합산 ──
       const killChoicesG = g.weaponKillChoices ?? {}
       const totalKill = Object.values(killChoicesG).reduce((a, b) => a + b, 0)
-      const newZombies = Math.max(0, g.zones[zone].zombies - totalKill)
+      const newZombies = Math.max(0, sprintZonesG[zone].zombies - totalKill)
       const updatedG = {
         ...g,
-        zones: { ...g.zones, [zone]: { ...g.zones[zone], zombies: newZombies } },
+        zones: { ...sprintZonesG, [zone]: { ...sprintZonesG[zone], zombies: newZombies } },
+        characters: sprintCharsG,
         weaponKillChoices: {},
       }
       const killsByPlayerG: Record<string, number> = {}
@@ -458,26 +535,25 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const weaponAnnounceG = totalKill > 0
         ? { zone, killsByPlayer: killsByPlayerG, totalKill, remainingZombies: newZombies }
         : null
-      // 숨기 아이템 — pendingHideChoices에서 읽음
       const pendingHidesG = g.pendingHideChoices ?? {}
       const hiddenEntries = Object.entries(pendingHidesG).map(([pid, charId]) => ({
-        playerId: pid,
-        charId,
-        zone,
+        playerId: pid, charId, zone,
       })).filter(e => g.characters[e.charId])
-      const newHiddenCharsG = Object.fromEntries(
-        Object.values(pendingHidesG).map(charId => [charId, true])
-      )
+      const newHiddenCharsG = Object.fromEntries(Object.values(pendingHidesG).map(charId => [charId, true]))
       const hideAnnounce = hiddenEntries.length > 0 ? { type: 'hide' as const, entries: hiddenEntries } : null
       await patchGameState(roomCode, {
         zones: updatedG.zones,
+        characters: updatedG.characters,
         weaponKillChoices: {},
         pendingHideChoices: {},
+        pendingSprintChoices: {},
+        pendingHardwareChoices: {},
         ...(weaponAnnounceG ? { lastWeaponUseAnnounce: weaponAnnounceG } : {}),
         ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenCharsG } : {}),
+        ...(sprintAnnounceG ? { lastSprintAnnounce: sprintAnnounceG } : {}),
       })
       // 좀비 감소 후 습격 여부 재판정
-      const attackState = startZoneAttackPhase(zone, updatedG)
+      const attackState = startZoneAttackPhase(zone, updatedG, hardwareBonusG)
       if (attackState) {
         await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
@@ -590,6 +666,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [!!game?.lastZombiePlayerAnnounce, isHost, roomCode])
+
+  // ── 스프린트 공지 → 5초 후 자동 해제 ─────────────────────────
+  useEffect(() => {
+    if (!isHost || !game?.lastSprintAnnounce) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g?.lastSprintAnnounce) return
+      await patchGameState(roomCode, { lastSprintAnnounce: null })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [!!game?.lastSprintAnnounce, isHost, roomCode])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -856,7 +943,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     try {
       const staged = [...stagedWeapons]
       const hideItemId = stagedHideItemId
-      // stagedHideCharId 없으면 구역 내 내 첫 캐릭터 자동 선택
+      const sprintItemId = stagedSprintItemId
+      const hardwareItemId = stagedHardwareItemId
+
+      // 숨기: charId 없으면 구역 내 내 첫 캐릭터 자동 선택
       let resolvedHideCharId = stagedHideCharId
       if (hideItemId && !resolvedHideCharId && game) {
         const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
@@ -864,15 +954,29 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           id => game.characters[id]?.playerId === uid && game.characters[id]?.isAlive
         ) ?? null
       }
-      const allStaged = hideItemId ? [...staged, hideItemId] : staged
-      if (allStaged.length === 0 && !resolvedHideCharId) {
+
+      const allStaged = [
+        ...staged,
+        ...(hideItemId ? [hideItemId] : []),
+        ...(sprintItemId ? [sprintItemId] : []),
+        ...(hardwareItemId ? [hardwareItemId] : []),
+      ]
+
+      const hasActions = allStaged.length > 0 || resolvedHideCharId || stagedSprintCharId
+      if (!hasActions) {
         await submitWeaponUsePass(roomCode)
       } else {
         const totalKill = staged.reduce((sum, id) => {
           const iid = id.split('_').slice(0, -1).join('_')
           return sum + (ITEM_CONFIGS[iid as keyof typeof ITEM_CONFIGS]?.zombieKill ?? 0)
         }, 0)
-        await submitWeaponConfirm(roomCode, allStaged, totalKill, myItemIds, resolvedHideCharId)
+        const sprintChoice = (stagedSprintCharId && stagedSprintTargetZone)
+          ? { charId: stagedSprintCharId, targetZone: stagedSprintTargetZone }
+          : null
+        await submitWeaponConfirm(
+          roomCode, allStaged, totalKill, myItemIds,
+          resolvedHideCharId, sprintChoice, hardwareItemId ? 1 : 0
+        )
       }
     } finally {
       setActionLoading(false)
@@ -884,36 +988,73 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const zoneState = game!.zones[zoneName]
     const config = ZONE_CONFIGS[zoneName]
     const chars = zoneState.characterIds.map(id => game!.characters[id]).filter(Boolean)
-    const isCurrentEventZone =
-      game!.phase === 'event' && EVENT_ZONE_ORDER[game!.currentEventZoneIndex] === zoneName
+    const activeEventZone = EVENT_ZONE_ORDER[game!.currentEventZoneIndex]
     const isVotingZone = game!.phase === 'voting' && game!.currentVote?.zone === zoneName
+    const isWeaponZone = game!.phase === 'weapon_use' && activeEventZone === zoneName
+    const isAnnounceZone = game!.phase === 'zone_announce' && activeEventZone === zoneName
+    const isEventZone = game!.phase === 'event' && activeEventZone === zoneName
+    const isActiveZone = isVotingZone || isWeaponZone || isAnnounceZone || isEventZone
+
+    const actualDefense = isActiveZone ? calcDefense(zoneName, game!) : null
+    const isUnderAttackNow = actualDefense !== null && zoneState.zombies > actualDefense && zoneState.zombies > 0
+
+    const phaseBadge = isVotingZone ? { label: '🗳️', cls: 'bg-red-600 text-white' }
+      : isWeaponZone   ? { label: '⚔️', cls: 'bg-orange-500 text-white' }
+      : isAnnounceZone ? { label: '📢', cls: 'bg-yellow-500 text-black' }
+      : isEventZone    ? { label: '▶', cls: 'bg-zinc-600 text-white' }
+      : null
+
+    const pos = ZONE_MAP_POSITIONS[zoneName]
 
     return (
       <div
         key={zoneName}
-        className={`rounded-xl p-3 flex flex-col gap-2 transition-all ${
-          zoneState.isClosed
-            ? 'bg-zinc-900 opacity-60 ring-2 ring-zinc-700'
-            : isVotingZone ? 'bg-zinc-800 ring-2 ring-red-500'
-            : isCurrentEventZone ? 'bg-zinc-800 ring-2 ring-yellow-500'
-            : 'bg-zinc-800'
-        }`}
+        style={{ left: pos.left, top: pos.top, width: pos.width ?? '29%' }}
+        className={`absolute rounded-lg p-1.5 flex flex-col gap-1 text-xs backdrop-blur-sm transition-all z-10
+          ${zoneState.isClosed
+            ? 'bg-zinc-950/85 opacity-70 ring-1 ring-zinc-700'
+            : isVotingZone   ? 'bg-red-950/90 ring-2 ring-red-500 z-20'
+            : isWeaponZone   ? 'bg-orange-950/90 ring-2 ring-orange-400 z-20'
+            : isAnnounceZone ? 'bg-yellow-950/90 ring-2 ring-yellow-400 z-20'
+            : isEventZone    ? 'bg-zinc-900/90 ring-2 ring-yellow-600 z-20'
+            : 'bg-zinc-950/80 ring-1 ring-zinc-700/60'}`}
       >
-        <div className="flex items-center justify-between">
-          <span className={`text-sm font-bold ${zoneState.isClosed ? 'text-zinc-500 line-through' : 'text-white'}`}>
-            {config.displayName}
-            {zoneState.isClosed && <span className="ml-1 text-xs no-underline not-italic text-red-600">🔒폐쇄</span>}
+        {/* 구역명 + 상태 배지 */}
+        <div className="flex items-center justify-between gap-0.5">
+          <span className={`font-bold leading-tight truncate ${zoneState.isClosed ? 'text-zinc-500 line-through' : 'text-white'}`}>
+            <span className="text-zinc-400 mr-0.5">{config.zoneNumber}</span>{config.displayName}
+            {zoneState.isClosed && <span className="ml-1 text-red-600 no-underline not-italic">🔒</span>}
           </span>
-          <span className="text-xs text-zinc-500">#{config.zoneNumber}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-red-400">🧟</span>
-          <span className="text-white font-mono font-bold">{zoneState.zombies}</span>
-          {config.defenseLimit > 0 && (
-            <span className="text-zinc-500 text-xs ml-1">방어 {config.defenseLimit}</span>
+          {phaseBadge && (
+            <span className={`px-1 py-0.5 rounded text-[10px] font-bold shrink-0 ${phaseBadge.cls}`}>{phaseBadge.label}</span>
           )}
         </div>
-        <div className="flex flex-wrap gap-1 min-h-[24px]">
+
+        {/* 좀비 아이콘 */}
+        <div className="flex flex-wrap gap-0 min-h-[18px] leading-none">
+          {Array.from({ length: Math.min(zoneState.zombies, 9) }).map((_, i) => (
+            <span key={i} className={`text-base leading-none ${isUnderAttackNow ? 'text-red-300' : ''}`}>🧟</span>
+          ))}
+          {zoneState.zombies > 9 && (
+            <span className="text-red-400 font-bold text-xs self-center ml-0.5">+{zoneState.zombies - 9}</span>
+          )}
+          {zoneState.zombies === 0 && (
+            <span className="text-zinc-600 text-[10px]">좀비 없음</span>
+          )}
+        </div>
+
+        {/* 방어력 (활성 구역만) */}
+        {actualDefense !== null && config.defenseLimit > 0 && (
+          <div className={`text-[10px] font-semibold ${isUnderAttackNow ? 'text-red-400' : 'text-green-400'}`}>
+            🛡 {actualDefense}/{config.defenseLimit}{isUnderAttackNow ? ' ⚠️습격' : ' ✓'}
+          </div>
+        )}
+        {zoneName === 'parking' && isActiveZone && (
+          <div className="text-[10px] text-red-400 font-semibold">⚠️ 항상 습격</div>
+        )}
+
+        {/* 캐릭터 토큰 */}
+        <div className="flex flex-wrap gap-0.5 min-h-[18px]">
           {chars.map(char => {
             const owner = players[char.playerId]
             const charConfig = CHARACTER_CONFIGS[char.characterId]
@@ -923,7 +1064,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               <div
                 key={char.id}
                 title={`${owner?.nickname ?? '?'} — ${charConfig?.name}${isHidden ? ' (숨음)' : ''}`}
-                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold
                   ${owner ? (COLOR_BG[owner.color] ?? 'bg-zinc-600') : 'bg-zinc-600'}
                   ${!char.isAlive ? 'opacity-20 text-white' : isHidden ? 'opacity-30 text-white border-dashed' : 'text-white'}
                   ${isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
@@ -932,14 +1073,18 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </div>
             )
           })}
+          {chars.filter(c => c.isAlive).length > 0 && (
+            <span className="text-zinc-500 text-[10px] self-center ml-0.5">
+              {chars.filter(c => c.isAlive).length}/{config.maxCapacity === Infinity ? '∞' : config.maxCapacity}
+            </span>
+          )}
         </div>
-        <div className="text-xs text-zinc-600">
-          {chars.filter(c => c.isAlive).length} / {config.maxCapacity === Infinity ? '∞' : config.maxCapacity}
-        </div>
+
+        {/* 주차장 트럭 */}
         {zoneName === 'parking' && (
-          <div className="text-xs text-zinc-500 flex items-center gap-1">
+          <div className="text-zinc-400 flex items-center gap-0.5">
             <span>🚚</span>
-            <span>트럭 {game!.itemDeck.length}장 남음</span>
+            <span>{game!.itemDeck.length}장</span>
           </div>
         )}
       </div>
@@ -1957,7 +2102,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* 존 보드 */}
         <div className="flex-1 p-4 overflow-y-auto">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto">
+          {/* 맵 보드 */}
+          <div className="relative w-full max-w-xl mx-auto aspect-square">
+            <img
+              src="/map.jpg"
+              alt="몰오브호러 맵"
+              className="w-full h-full object-cover rounded-xl"
+            />
             {ZONE_ORDER.map(renderZone)}
           </div>
           {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
