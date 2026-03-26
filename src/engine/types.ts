@@ -272,6 +272,14 @@ export interface GameState {
     entries: Array<{ playerId: string; charId: string; zone: ZoneName }>
   } | null
 
+  // weapon_use 결과 공지 (아이템 사용 타임 종료 후 N초간 표시)
+  lastWeaponUseAnnounce: {
+    zone: ZoneName
+    killsByPlayer: Record<string, number>  // playerId → kill 수 (0 제외)
+    totalKill: number
+    remainingZombies: number
+  } | null
+
   // 결과
   winners: string[]
   finalScores: Record<string, number>

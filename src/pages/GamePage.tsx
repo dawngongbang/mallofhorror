@@ -100,13 +100,16 @@ function normalizeGame(g: GameState): GameState {
     currentVote:            normalizedVote,
     itemSearchPreview:      g.itemSearchPreview ? toArray(g.itemSearchPreview) : null,
     pendingVictimSelection: g.pendingVictimSelection ?? null,
-    lastVoteAnnounce:       g.lastVoteAnnounce       ?? null,
+    lastVoteAnnounce:       g.lastVoteAnnounce
+                              ? { ...g.lastVoteAnnounce, votes: g.lastVoteAnnounce.votes ?? {}, bonusVoteWeights: g.lastVoteAnnounce.bonusVoteWeights ?? {} }
+                              : null,
     lastZombieAttackResult: g.lastZombieAttackResult ?? null,
     cctvViewers:            Array.isArray(g.cctvViewers) ? g.cctvViewers : [],
     weaponUseStatus:        (g.weaponUseStatus && typeof g.weaponUseStatus === 'object') ? g.weaponUseStatus : {},
     weaponKillChoices:      (g.weaponKillChoices && typeof g.weaponKillChoices === 'object') ? g.weaponKillChoices : {},
     hiddenCharacters:       (g.hiddenCharacters && typeof g.hiddenCharacters === 'object') ? g.hiddenCharacters : {},
     lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
+    lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce ?? null,
   }
 }
 
@@ -261,7 +264,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             const nextZoneIndex = game.currentEventZoneIndex + 1
             const voteMs = (meta?.settings.votingTime ?? 60) * 1000
             // 무기 kill 합산 후 일괄 적용
-            const totalKill = Object.values(game.weaponKillChoices ?? {}).reduce((a, b) => a + b, 0)
+            const killChoices = game.weaponKillChoices ?? {}
+            const totalKill = Object.values(killChoices).reduce((a, b) => a + b, 0)
             const prevZombies = game.zones[zone].zombies
             const newZombies = Math.max(0, prevZombies - totalKill)
             const updatedGame = {
@@ -269,6 +273,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               zones: { ...game.zones, [zone]: { ...game.zones[zone], zombies: newZombies } },
               weaponKillChoices: {},
             }
+            // 무기 사용 공지
+            const killsByPlayer: Record<string, number> = {}
+            for (const [pid, k] of Object.entries(killChoices)) {
+              if (k > 0) killsByPlayer[pid] = k
+            }
+            const weaponAnnounce = { zone, killsByPlayer, totalKill, remainingZombies: newZombies }
             // 숨기 아이템 공지 (hide announce)
             const hiddenEntries = Object.keys(game.hiddenCharacters ?? {}).map(charId => ({
               playerId: game.characters[charId]?.playerId ?? '',
@@ -278,7 +288,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             const hideAnnounce = hiddenEntries.length > 0
               ? { type: 'hide' as const, entries: hiddenEntries }
               : null
-            await patchGameState(roomCode, { zones: updatedGame.zones, weaponKillChoices: {}, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
+            await patchGameState(roomCode, { zones: updatedGame.zones, weaponKillChoices: {}, lastWeaponUseAnnounce: weaponAnnounce, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
             const attackState = startZoneAttackPhase(zone, updatedGame)
             if (attackState) {
               await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
@@ -403,20 +413,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const nextZoneIndex = g.currentEventZoneIndex + 1
       const voteMs = (meta?.settings.votingTime ?? 60) * 1000
       // 무기 kill 합산 후 일괄 적용
-      const totalKill = Object.values(g.weaponKillChoices ?? {}).reduce((a, b) => a + b, 0)
+      const killChoicesG = g.weaponKillChoices ?? {}
+      const totalKill = Object.values(killChoicesG).reduce((a, b) => a + b, 0)
       const newZombies = Math.max(0, g.zones[zone].zombies - totalKill)
       const updatedG = {
         ...g,
         zones: { ...g.zones, [zone]: { ...g.zones[zone], zombies: newZombies } },
         weaponKillChoices: {},
       }
+      const killsByPlayerG: Record<string, number> = {}
+      for (const [pid, k] of Object.entries(killChoicesG)) {
+        if (k > 0) killsByPlayerG[pid] = k
+      }
+      const weaponAnnounceG = { zone, killsByPlayer: killsByPlayerG, totalKill, remainingZombies: newZombies }
       const hiddenEntries = Object.keys(g.hiddenCharacters ?? {}).map(charId => ({
         playerId: g.characters[charId]?.playerId ?? '',
         charId,
         zone,
       })).filter(e => e.playerId)
       const hideAnnounce = hiddenEntries.length > 0 ? { type: 'hide' as const, entries: hiddenEntries } : null
-      await patchGameState(roomCode, { zones: updatedG.zones, weaponKillChoices: {}, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
+      await patchGameState(roomCode, { zones: updatedG.zones, weaponKillChoices: {}, lastWeaponUseAnnounce: weaponAnnounceG, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
       // 좀비 감소 후 습격 여부 재판정
       const attackState = startZoneAttackPhase(zone, updatedG)
       if (attackState) {
@@ -506,6 +522,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [!!game?.lastHideRevealAnnounce, game?.lastHideRevealAnnounce?.type, isHost, roomCode])
+
+  // ── weapon_use 공지 → 5초 후 자동 해제 ───────────────────────
+  useEffect(() => {
+    if (!isHost || !game?.lastWeaponUseAnnounce) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g?.lastWeaponUseAnnounce) return
+      await patchGameState(roomCode, { lastWeaponUseAnnounce: null })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [!!game?.lastWeaponUseAnnounce, isHost, roomCode])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -1762,6 +1789,29 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 </span>
               )
             })}
+          </div>
+        )
+      })()}
+
+      {/* weapon_use 결과 공지 배너 */}
+      {game.lastWeaponUseAnnounce && (() => {
+        const ann = game.lastWeaponUseAnnounce
+        const zoneName = ZONE_CONFIGS[ann.zone]?.displayName ?? ann.zone
+        const killLines = Object.entries(ann.killsByPlayer).map(([pid, k]) => {
+          const name = players[pid]?.nickname ?? pid
+          return `${name}님이 ${k}마리 처치`
+        })
+        return (
+          <div className="px-4 py-2 text-sm text-center font-bold border-b bg-orange-950 border-orange-800 text-orange-200">
+            <span className="block">🔫 {zoneName} — 아이템 사용 결과</span>
+            {killLines.length > 0
+              ? killLines.map((line, i) => <span key={i} className="block">{line}</span>)
+              : <span className="block text-orange-400">사용된 무기 없음</span>}
+            <span className="block mt-0.5">
+              {ann.totalKill > 0
+                ? `총 ${ann.totalKill}마리 처치 → 남은 좀비 ${ann.remainingZombies}마리`
+                : `남은 좀비 ${ann.remainingZombies}마리`}
+            </span>
           </div>
         )
       })()}

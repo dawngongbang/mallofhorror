@@ -94,6 +94,7 @@ export function createInitialGameState(
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    lastWeaponUseAnnounce: null,
 
     winners: [],
     finalScores: {},

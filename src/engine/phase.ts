@@ -113,6 +113,7 @@ export function initRoundState(state: GameState): GameState {
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    lastWeaponUseAnnounce: null,
   }
 }
 

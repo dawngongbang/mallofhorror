@@ -55,6 +55,7 @@ export function createTestState(): GameState {
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    lastWeaponUseAnnounce: null,
 
     winners: [],
     finalScores: {},
