@@ -51,43 +51,48 @@ export async function declareCharacter(
   )
 }
 
-// ── 플레이어 행동: 목적지 봉인 ───────────────────────────────
-// Security Rules: 본인 + 호스트만 읽기 가능
+// ── 플레이어 행동: 목적지 선택 / 확정 ──────────────────────────
+// Security Rules: sealedDestinations는 본인 + 호스트만 읽기 가능
 
-export async function sealDestination(
+// 임시 선택 — 확정 전까지 변경 가능
+export async function selectDestination(
   roomCode: string,
   targetZone: ZoneName
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
-
   const destination: SealedDestination = {
     playerId: uid,
     targetZone,
     submittedAt: Date.now(),
   }
-
-  // 제출 여부는 공개 (모두가 볼 수 있음)
-  await Promise.all([
-    set(ref(db, `games/${roomCode}/game/sealedDestinations/${uid}`), destination),
-    set(ref(db, `games/${roomCode}/game/destinationStatus/${uid}`), true),
-  ])
+  await set(ref(db, `games/${roomCode}/game/sealedDestinations/${uid}`), destination)
 }
 
-// ── 플레이어 행동: 투표 ───────────────────────────────────────
+// 확정 — 이후 변경 불가
+export async function confirmDestination(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  await set(ref(db, `games/${roomCode}/game/destinationStatus/${uid}`), true)
+}
 
-export async function submitVote(
+// ── 플레이어 행동: 투표 선택 / 확정 ──────────────────────────
+
+// 임시 투표 — 확정 전까지 변경 가능
+export async function selectVote(
   roomCode: string,
-  _zone: ZoneName,
   targetPlayerId: string
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
+  await set(ref(db, `games/${roomCode}/game/currentVote/votes/${uid}`), targetPlayerId)
+}
 
-  await Promise.all([
-    set(ref(db, `games/${roomCode}/game/currentVote/votes/${uid}`), targetPlayerId),
-    set(ref(db, `games/${roomCode}/game/currentVote/status/${uid}`), true),
-  ])
+// 투표 확정 — 이후 변경 불가
+export async function confirmVote(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  await set(ref(db, `games/${roomCode}/game/currentVote/status/${uid}`), true)
 }
 
 // ── 플레이어 행동: 아이템 사용 ───────────────────────────────

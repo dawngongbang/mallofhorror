@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  subscribeToGame, declareCharacter, sealDestination,
-  submitVote, patchGameState, subscribeToMyItems, submitItemSearchChoice,
+  subscribeToGame, declareCharacter,
+  selectDestination, confirmDestination,
+  selectVote, confirmVote,
+  patchGameState, subscribeToMyItems, submitItemSearchChoice,
   submitSheriffRollRequest, submitVictimChoice,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
@@ -96,6 +98,7 @@ function normalizeGame(g: GameState): GameState {
     currentVote:            normalizedVote,
     itemSearchPreview:      g.itemSearchPreview ? toArray(g.itemSearchPreview) : null,
     pendingVictimSelection: g.pendingVictimSelection ?? null,
+    lastVoteAnnounce:       g.lastVoteAnnounce       ?? null,
     lastZombieAttackResult: g.lastZombieAttackResult ?? null,
   }
 }
@@ -117,6 +120,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [truckGiven, setTruckGiven] = useState<string | null>(null)
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
   const processingRef = useRef(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -126,6 +130,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const unsubItems = uid ? subscribeToMyItems(roomCode, uid, setMyItemIds) : () => {}
     return () => { unsubGame(); unsubPlayers(); unsubMeta(); unsubItems() }
   }, [roomCode, uid])
+
+  // ── 카운트다운 타이머 ─────────────────────────────────────────
+  useEffect(() => {
+    if (!game?.phaseDeadline) { setCountdown(null); return }
+    const tick = () => setCountdown(Math.max(0, Math.ceil((game.phaseDeadline - Date.now()) / 1000)))
+    tick()
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [game?.phaseDeadline])
 
   // ── 호스트 자동 진행 ─────────────────────────────────────────
   const isHost = meta?.hostId === uid
@@ -148,7 +161,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         else if (game.phase === 'character_select') {
           const declared = Object.keys(game.characterDeclarations)
           if (declared.length >= game.playerOrder.length) {
-            await patchGameState(roomCode, { phase: 'destination_seal' })
+            const sealMs = (meta?.settings.sealTime ?? 60) * 1000
+            await patchGameState(roomCode, { phase: 'destination_seal', phaseDeadline: Date.now() + sealMs })
             didWork = true
           }
         }
@@ -192,52 +206,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           didWork = true
         }
 
-        // voting: 전원 투표 완료 → 결과 처리
-        else if (game.phase === 'voting' && game.currentVote && !game.pendingVictimSelection) {
+        // voting: 전원 확정 → 투표 결과 공지 세팅 (실제 처리는 별도 useEffect에서)
+        else if (game.phase === 'voting' && game.currentVote && !game.pendingVictimSelection && !game.lastVoteAnnounce) {
           const cv = game.currentVote
-          console.log('[HOST] voting check — eligibleVoters:', cv.eligibleVoters, 'status:', cv.status)
           const allVoted = cv.eligibleVoters.length > 0 &&
             cv.eligibleVoters.every(id => cv.status[id])
-          console.log('[HOST] allVoted:', allVoted)
           if (allVoted) {
-            if (cv.type === 'zombie_attack') {
-              const result = calculateVoteResult(cv, game)
-              console.log('[HOST] zombie_attack result:', result)
-              if (result.winner) {
-                const loserCharsInZone = Object.values(game.characters)
-                  .filter(c =>
-                    c.playerId === result.winner &&
-                    c.isAlive &&
-                    game.zones[cv.zone].characterIds.includes(c.id)
-                  )
-                if (loserCharsInZone.length <= 1) {
-                  // 캐릭터가 1개 이하 → 자동 선택
-                  const nextState = await hostResolveVote(roomCode, game, loserCharsInZone[0]?.id)
-                  if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
-                    await patchGameState(roomCode, { phase: 'zone_announce' })
-                  }
-                } else {
-                  // 캐릭터 여러 개 → 패배자에게 선택 위임
-                  await patchGameState(roomCode, {
-                    pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner },
-                  })
-                }
-                didWork = true
-              } else {
-                // 동률 → hostResolveVote가 재투표 처리
-                await hostResolveVote(roomCode, game, undefined)
-                didWork = true
-              }
-            } else {
-              // truck_search / sheriff
-              console.log('[HOST] calling hostResolveVote (non-zombie)')
-              const nextState = await hostResolveVote(roomCode, game, undefined)
-              console.log('[HOST] hostResolveVote done, nextState.phase:', nextState.phase)
-              if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
-                await patchGameState(roomCode, { phase: 'zone_announce' })
-              }
-              didWork = true
-            }
+            const result = calculateVoteResult(cv, game)
+            await patchGameState(roomCode, {
+              lastVoteAnnounce: { votes: cv.votes ?? {}, tally: result.tally },
+            })
+            didWork = true
           }
         }
       } catch (err) {
@@ -251,6 +230,94 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
     runHostStep()
   }, [game, isHost, roomCode, processSignal])
+
+  // ── destination_seal 타임아웃: 미확정자 자동 처리 ───────────
+  useEffect(() => {
+    if (!isHost || game?.phase !== 'destination_seal' || !game.phaseDeadline) return
+    const remaining = game.phaseDeadline - Date.now()
+    if (remaining <= 0) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'destination_seal') return
+      const statusPatch: Record<string, boolean> = {}
+      const sealedPatch: Record<string, unknown> = {}
+      let needsPatch = false
+      for (const playerId of g.playerOrder) {
+        if (!g.destinationStatus[playerId]) {
+          statusPatch[playerId] = true
+          needsPatch = true
+          // 임시 선택도 없으면 현재 위치 유지 (이동 안 함)
+          if (!g.sealedDestinations[playerId]) {
+            const charId = g.characterDeclarations[playerId]?.characterId
+            const char = charId ? g.characters[charId] : null
+            if (char) sealedPatch[playerId] = { playerId, targetZone: char.zone, submittedAt: Date.now() }
+          }
+        }
+      }
+      if (needsPatch) {
+        await patchGameState(roomCode, {
+          destinationStatus: { ...g.destinationStatus, ...statusPatch },
+          ...(Object.keys(sealedPatch).length > 0 ? { sealedDestinations: { ...g.sealedDestinations, ...sealedPatch } as typeof g.sealedDestinations } : {}),
+        })
+      }
+    }, remaining)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.phaseDeadline, isHost, roomCode])
+
+  // ── voting 타임아웃: 미확정자 자동 처리 ──────────────────────
+  useEffect(() => {
+    if (!isHost || game?.phase !== 'voting' || !game.phaseDeadline || !game.currentVote) return
+    const remaining = game.phaseDeadline - Date.now()
+    if (remaining <= 0) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'voting' || !g.currentVote) return
+      const cv = g.currentVote
+      if (cv.eligibleVoters.every(id => cv.status[id])) return  // 이미 전원 확정
+      const newStatus = { ...cv.status }
+      for (const id of cv.eligibleVoters) {
+        if (!cv.status[id]) newStatus[id] = true
+      }
+      await patchGameState(roomCode, { currentVote: { ...cv, status: newStatus } })
+    }, remaining)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.phaseDeadline, isHost, roomCode])
+
+  // ── 투표 결과 공지 → 4초 후 실제 처리 ───────────────────────
+  useEffect(() => {
+    if (!isHost || game?.phase !== 'voting' || !game.lastVoteAnnounce || game.pendingVictimSelection) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'voting' || !g.currentVote || !g.lastVoteAnnounce) return
+      const cv = g.currentVote
+      // 공지 먼저 제거
+      await patchGameState(roomCode, { lastVoteAnnounce: null })
+
+      if (cv.type === 'zombie_attack') {
+        const result = calculateVoteResult(cv, g)
+        if (result.winner) {
+          const loserCharsInZone = Object.values(g.characters)
+            .filter(c => c.playerId === result.winner && c.isAlive && g.zones[cv.zone].characterIds.includes(c.id))
+          if (loserCharsInZone.length <= 1) {
+            const nextState = await hostResolveVote(roomCode, g, loserCharsInZone[0]?.id)
+            if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
+              await patchGameState(roomCode, { phase: 'zone_announce' })
+            }
+          } else {
+            await patchGameState(roomCode, { pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner } })
+          }
+        } else {
+          await hostResolveVote(roomCode, g, undefined)
+        }
+      } else {
+        const nextState = await hostResolveVote(roomCode, g, undefined)
+        if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
+          await patchGameState(roomCode, { phase: 'zone_announce' })
+        }
+      }
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [game?.phase, !!game?.lastVoteAnnounce, isHost, roomCode])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -311,14 +378,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         return
       }
 
+      const voteMs = (meta?.settings.votingTime ?? 60) * 1000
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
-        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', lastZombieAttackResult: null })
+        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
       const survivorState = startZoneSurvivorPhase(zone, g)
       if (survivorState) {
-        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', lastZombieAttackResult: null })
+        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
@@ -427,24 +495,40 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   }
 
   // ── destination_seal ─────────────────────────────────────────
-  const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone
+  const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone   // 임시 선택
+  const myDestConfirmed = !!(uid && game.destinationStatus[uid])          // 확정 여부
   const myMovingChar = uid ? game.characterDeclarations[uid]?.characterId : undefined
   const myMovingCharData = myMovingChar ? game.characters[myMovingChar] : undefined
 
-  async function handleSealDestination(zone: ZoneName) {
-    if (!uid || mySealedZone || actionLoading) return
+  async function handleSelectDestination(zone: ZoneName) {
+    if (!uid || myDestConfirmed || actionLoading) return
     setActionLoading(true)
-    await sealDestination(roomCode, zone)
+    await selectDestination(roomCode, zone)
+    setActionLoading(false)
+  }
+
+  async function handleConfirmDestination() {
+    if (!uid || !mySealedZone || myDestConfirmed || actionLoading) return
+    setActionLoading(true)
+    await confirmDestination(roomCode)
     setActionLoading(false)
   }
 
   // ── voting ───────────────────────────────────────────────────
   const myVote = uid && game.currentVote ? game.currentVote.votes[uid] : undefined
+  const myVoteConfirmed = !!(uid && game.currentVote?.status[uid])
 
-  async function handleVote(targetPlayerId: string) {
-    if (!uid || !game || !game.currentVote || myVote || actionLoading) return
+  async function handleSelectVote(targetPlayerId: string) {
+    if (!uid || !game?.currentVote || myVoteConfirmed || actionLoading) return
     setActionLoading(true)
-    await submitVote(roomCode, game.currentVote.zone, targetPlayerId)
+    await selectVote(roomCode, targetPlayerId)
+    setActionLoading(false)
+  }
+
+  async function handleConfirmVote() {
+    if (!uid || !myVote || myVoteConfirmed || actionLoading) return
+    setActionLoading(true)
+    await confirmVote(roomCode)
     setActionLoading(false)
   }
 
@@ -744,36 +828,55 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       // ── 목적지 선택 ─────────────────────────────────────────
       case 'destination_seal': {
-        const sealedCount = Object.values(game!.destinationStatus).filter(Boolean).length
+        const confirmedCount = Object.values(game!.destinationStatus).filter(Boolean).length
         const total = game!.playerOrder.length
-
-        if (mySealedZone) {
-          return (
-            <div>
-              <p className="text-green-400 text-sm font-bold mb-1">✓ 목적지 봉인 완료</p>
-              <p className="text-zinc-500 text-xs">{sealedCount} / {total}명 완료</p>
-            </div>
-          )
-        }
 
         return (
           <div>
-            <p className="text-white text-sm font-bold mb-1">목적지 선택</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-white text-sm font-bold">목적지 선택</p>
+              {countdown !== null && (
+                <span className={`text-xs font-mono tabular-nums ${countdown <= 10 ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
+                  ⏰ {countdown}초
+                </span>
+              )}
+            </div>
             {myMovingCharData && (
               <p className="text-zinc-400 text-xs mb-2">
                 이동 캐릭터: <span className="text-yellow-400">{CHARACTER_CONFIGS[myMovingCharData.characterId]?.name}</span>
                 {' '}({ZONE_CONFIGS[myMovingCharData.zone].displayName} → ?)
               </p>
             )}
-            <div className="flex gap-2 flex-wrap">
-              {ZONE_ORDER.filter(zone => zone !== myMovingCharData?.zone && !game!.zones[zone].isClosed).map(zone => (
-                <button key={zone} onClick={() => handleSealDestination(zone)} disabled={actionLoading}
-                  className="bg-blue-700 hover:bg-blue-600 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
-                  {ZONE_CONFIGS[zone].displayName}
-                </button>
-              ))}
-            </div>
-            <p className="text-zinc-600 text-xs mt-2">{sealedCount} / {total}명 완료</p>
+            {myDestConfirmed ? (
+              <p className="text-green-400 text-sm font-bold">✓ 확정 완료 — {mySealedZone ? ZONE_CONFIGS[mySealedZone].displayName : '이동 없음'}</p>
+            ) : (
+              <>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {ZONE_ORDER.filter(z => z !== myMovingCharData?.zone && !game!.zones[z].isClosed).map(zone => (
+                    <button key={zone} onClick={() => handleSelectDestination(zone)} disabled={actionLoading}
+                      className={`text-white text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                        mySealedZone === zone
+                          ? 'bg-yellow-600 ring-2 ring-yellow-400'
+                          : 'bg-zinc-700 hover:bg-blue-600'
+                      }`}>
+                      {ZONE_CONFIGS[zone].displayName}
+                    </button>
+                  ))}
+                </div>
+                {mySealedZone ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-400 text-xs">선택: <span className="text-yellow-300 font-medium">{ZONE_CONFIGS[mySealedZone].displayName}</span></span>
+                    <button onClick={handleConfirmDestination} disabled={actionLoading}
+                      className="bg-green-600 hover:bg-green-500 disabled:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
+                      확정
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-zinc-600 text-xs">구역을 선택하세요</p>
+                )}
+              </>
+            )}
+            <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {total}명 확정</p>
           </div>
         )
       }
@@ -1111,52 +1214,114 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           id,
           nickname: players[id]?.nickname ?? '?',
           color: players[id]?.color ?? 'red',
-          voted: !!vote.status[id],
         }))
 
-        const votedCount = vote.eligibleVoters.filter(id => vote.status[id]).length
+        const confirmedCount = vote.eligibleVoters.filter(id => vote.status[id]).length
+        const canVote = vote.eligibleVoters.includes(uid ?? '')
 
-        if (myVote) {
+        // ── 투표 결과 공지 화면 ──────────────────────────────
+        const announce = game!.lastVoteAnnounce
+        if (announce) {
+          const sortedTally = Object.entries(announce.tally)
+            .sort(([, a], [, b]) => b - a)
+          const maxVotes = sortedTally[0]?.[1] ?? 0
+
           return (
             <div>
-              <p className="text-sm text-zinc-400 mb-1">
-                <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel}
+              <p className="text-sm text-zinc-400 mb-3">
+                <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel} 결과
               </p>
-              <p className="text-green-400 text-sm">
-                ✓ {players[myVote]?.nickname}에게 투표 완료
-              </p>
-              <p className="text-zinc-600 text-xs mt-1">{votedCount} / {vote.eligibleVoters.length}명 투표 완료</p>
+
+              {/* 누가 누굴 뽑았는지 */}
+              <div className="space-y-1 mb-3">
+                {vote.eligibleVoters.map(voterId => {
+                  const targetId = announce.votes[voterId]
+                  const voterName = players[voterId]?.nickname ?? '?'
+                  const targetName = targetId ? (players[targetId]?.nickname ?? '?') : '기권'
+                  return (
+                    <div key={voterId} className="flex items-center gap-2 text-sm">
+                      <span className={`font-medium ${voterId === uid ? 'text-blue-300' : 'text-zinc-300'}`}>
+                        {voterName}
+                      </span>
+                      <span className="text-zinc-600">→</span>
+                      <span className={targetId ? 'text-red-300 font-medium' : 'text-zinc-500'}>{targetName}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* 최종 집계 */}
+              {(() => {
+                const winnerIcon = vote.type === 'zombie_attack' ? ' 💀' : vote.type === 'truck_search' ? ' 🚚' : ' 👮'
+                return (
+                  <div className="border-t border-zinc-800 pt-2 space-y-1">
+                    {sortedTally.map(([candidateId, votes]) => (
+                      <div key={candidateId} className={`flex items-center justify-between text-sm ${votes === maxVotes ? 'text-white font-bold' : 'text-zinc-400'}`}>
+                        <span>{players[candidateId]?.nickname ?? '?'}</span>
+                        <span className={votes === maxVotes ? 'text-red-400' : ''}>{votes}표{votes === maxVotes ? winnerIcon : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              <p className="text-zinc-600 text-xs mt-3">잠시 후 다음 단계로 진행됩니다...</p>
             </div>
           )
         }
 
-        const canVote = vote.eligibleVoters.includes(uid ?? '')
+        // ── 투표 진행 화면 ────────────────────────────────────
         return (
           <div>
-            <p className="text-sm text-zinc-400 mb-2">
-              <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel}
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-zinc-400">
+                <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel}
+                {vote.round > 0 && <span className="text-zinc-500 text-xs"> (재투표 {vote.round}회차)</span>}
+              </p>
+              {countdown !== null && (
+                <span className={`text-xs font-mono tabular-nums ${countdown <= 10 ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
+                  ⏰ {countdown}초
+                </span>
+              )}
+            </div>
+
             {canVote ? (
               <>
-                <p className="text-white text-sm font-bold mb-2">투표할 대상 선택</p>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap mb-3">
                   {candidates.map(c => (
-                    <button key={c.id} onClick={() => handleVote(c.id)} disabled={actionLoading}
+                    <button key={c.id}
+                      onClick={() => handleSelectVote(c.id)}
+                      disabled={myVoteConfirmed || actionLoading}
                       className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${
-                        vote.candidates.includes(c.id)
-                          ? 'bg-zinc-700 hover:bg-red-800 text-white'
-                          : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        myVote === c.id
+                          ? 'bg-red-700 ring-2 ring-red-400 text-white'
+                          : 'bg-zinc-700 hover:bg-red-800 text-white disabled:opacity-50'
                       }`}>
-                      <div className={`w-3 h-3 rounded-full ${COLOR_BG[c.color]}`} />
+                      <div className={`w-3 h-3 rounded-full shrink-0 ${COLOR_BG[c.color]}`} />
                       {c.nickname}
                     </button>
                   ))}
                 </div>
+
+                {myVoteConfirmed ? (
+                  <p className="text-green-400 text-sm">✓ <span className="text-white">{players[myVote ?? '']?.nickname}</span>에게 투표 확정</p>
+                ) : myVote ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-400 text-xs">선택: <span className="text-red-300 font-medium">{players[myVote]?.nickname}</span></span>
+                    <button onClick={handleConfirmVote} disabled={actionLoading}
+                      className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
+                      확정
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-zinc-600 text-xs">투표할 대상을 선택하세요</p>
+                )}
               </>
             ) : (
               <p className="text-zinc-500 text-sm">이번 투표에 참여하지 않습니다.</p>
             )}
-            <p className="text-zinc-600 text-xs mt-2">{votedCount} / {vote.eligibleVoters.length}명 투표 완료</p>
+
+            <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {vote.eligibleVoters.length}명 확정</p>
           </div>
         )
       }
@@ -1228,27 +1393,29 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             </div>
           )}
 
-          {/* 주사위 배너: 라운드 중 항상 표시. 좀비 배치는 전원 공개, 주사위 눈은 정식보안관만 */}
-          {game.lastDiceRoll && game.phase !== 'roll_dice' && game.phase !== 'dice_reveal' && game.phase !== 'setup_place' && (
-            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
-              <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
-              {uid === sheriffId && game.isRealSheriff && (
-                <div className="flex gap-1">
-                  {game.lastDiceRoll.dice.map((d, i) => (
-                    <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
+          {/* 주사위 배너: 이동 페이즈 중에는 정식보안관 본인만, 이동 완료 후 전체 공개 */}
+          {game.lastDiceRoll && !['roll_dice', 'dice_reveal', 'setup_place'].includes(game.phase) && (() => {
+            const isMovementPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game.phase)
+            const iAmRealSheriff = uid === sheriffId && game.isRealSheriff
+            if (isMovementPhase && !iAmRealSheriff) return null
+            return (
+              <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+                <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
+                {iAmRealSheriff && (
+                  <div className="flex gap-1">
+                    {game.lastDiceRoll.dice.map((d, i) => (
+                      <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
+                  {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
+                    <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
                   ))}
                 </div>
-              )}
-              <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
-                {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
-                  <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
-                ))}
               </div>
-              {!game.isRealSheriff && (
-                <span className="text-zinc-600 text-xs">· 정식보안관 없음</span>
-              )}
-            </div>
-          )}
+            )
+          })()}
 
           {/* 액션 패널 */}
           <div className="max-w-2xl mx-auto mt-4 bg-zinc-900 rounded-2xl p-4">
@@ -1289,13 +1456,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 .filter(c => c.playerId === playerId && c.isAlive)
               const aliveCount = aliveChars.length
               const isDeclared = !!game.characterDeclarations[playerId]
-              const isSealed = !!game.destinationStatus[playerId]
-              const hasVoted = !!game.currentVote?.status[playerId]
+              const isDestConfirmed = !!game.destinationStatus[playerId]
+              const hasTempDest = !!game.sealedDestinations[playerId]
+              const hasVoteConfirmed = !!game.currentVote?.status[playerId]
+              const hasTempVote = !!game.currentVote?.votes[playerId]
 
               let statusDot = ''
               if (game.phase === 'character_select') statusDot = isDeclared ? '✓' : '...'
-              else if (game.phase === 'destination_seal') statusDot = isSealed ? '✓' : '...'
-              else if (game.phase === 'voting') statusDot = hasVoted ? '✓' : '...'
+              else if (game.phase === 'destination_seal') statusDot = isDestConfirmed ? '✓' : hasTempDest ? '●' : '...'
+              else if (game.phase === 'voting') statusDot = hasVoteConfirmed ? '✓' : hasTempVote ? '●' : '...'
 
               return (
                 <div key={playerId} className="bg-zinc-800 rounded-xl p-2">
@@ -1335,7 +1504,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                         </span>
                       )}
                       {statusDot && (
-                        <span className={`text-xs ${statusDot === '✓' ? 'text-green-400' : 'text-zinc-600'}`}>
+                        <span className={`text-xs ${statusDot === '✓' ? 'text-green-400' : statusDot === '●' ? 'text-yellow-400' : 'text-zinc-600'}`}>
                           {statusDot}
                         </span>
                       )}

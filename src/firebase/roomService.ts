@@ -180,3 +180,20 @@ export async function updateRoomStatus(
     updatedAt: serverTimestamp(),
   })
 }
+
+export async function updateRoomSettings(
+  roomCode: string,
+  settings: Partial<GameSettings>
+): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  // 메타 전체를 읽어서 병합 후 저장
+  const snap = await get(ref(db, `games/${roomCode}/meta`))
+  if (!snap.exists()) return
+  const meta = snap.val() as RoomMeta
+  if (meta.hostId !== uid) return  // 호스트만 변경 가능
+  await update(ref(db, `games/${roomCode}/meta`), {
+    settings: { ...meta.settings, ...settings },
+    updatedAt: serverTimestamp(),
+  })
+}

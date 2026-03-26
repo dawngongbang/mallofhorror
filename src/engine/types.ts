@@ -238,6 +238,12 @@ export interface GameState {
     chosenCharacterId?: string   // 패배자가 선택 완료 시 기록
   } | null
 
+  // 투표 결과 공지 (전원 확정 직후 N초간 표시 후 처리)
+  lastVoteAnnounce: {
+    votes: Record<string, string>    // voterId → targetPlayerId
+    tally: Record<string, number>    // candidateId → 득표 수 (가중치 포함)
+  } | null
+
   // 가장 최근 좀비 공격 사망 결과 (zone_announce에서 공지용)
   lastZombieAttackResult: {
     zone: ZoneName

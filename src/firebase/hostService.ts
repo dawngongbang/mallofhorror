@@ -155,7 +155,7 @@ export async function hostResolveVote(
       status: Object.fromEntries(voteState.eligibleVoters.map(id => [id, false])),
       bonusVoteWeights: {},
     }
-    await patchGameState(roomCode, { currentVote: nextVote })
+    await patchGameState(roomCode, { currentVote: nextVote, phaseDeadline: Date.now() + 60000 })
     return { ...state, currentVote: nextVote }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor, deleteRoom } from '../firebase/roomService'
+import { subscribeToPlayers, subscribeToMeta, setReady, changePlayerColor, deleteRoom, updateRoomSettings } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { initPresence, startHeartbeat } from '../firebase/presenceService'
 import { startGame } from '../firebase/hostService'
@@ -159,6 +159,53 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
             })}
           </div>
         </div>
+
+        {/* 게임 설정 (호스트만 변경 가능) */}
+        {isHost && (
+          <div className="bg-zinc-900 rounded-2xl p-5 mb-4">
+            <p className="text-xs text-zinc-500 mb-3">게임 설정</p>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-zinc-400 mb-1.5">
+                  이동 선택 시간
+                  <span className="text-zinc-500 ml-1">({meta?.settings.sealTime ?? 60}초)</span>
+                </p>
+                <div className="flex gap-1.5">
+                  {[30, 60, 90, 120].map(sec => (
+                    <button key={sec}
+                      onClick={() => updateRoomSettings(roomCode, { sealTime: sec })}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        (meta?.settings.sealTime ?? 60) === sec
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}>
+                      {sec}초
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-400 mb-1.5">
+                  투표 시간
+                  <span className="text-zinc-500 ml-1">({meta?.settings.votingTime ?? 60}초)</span>
+                </p>
+                <div className="flex gap-1.5">
+                  {[30, 60, 90, 120].map(sec => (
+                    <button key={sec}
+                      onClick={() => updateRoomSettings(roomCode, { votingTime: sec })}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        (meta?.settings.votingTime ?? 60) === sec
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}>
+                      {sec}초
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 버튼 */}
         <div className="space-y-2">
