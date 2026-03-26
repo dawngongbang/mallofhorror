@@ -2511,16 +2511,27 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               const hasVoteConfirmed = !!game.currentVote?.status[playerId]
               const hasTempVote = !!game.currentVote?.votes[playerId]
 
+              // 현재 행동 차례인 플레이어 강조
+              const currentDeclarer = game.declarationOrder.find(pid => !game.characterDeclarations[pid])
+              const isCurrentTurn =
+                (game.phase === 'character_select' && playerId === currentDeclarer) ||
+                (game.phase === 'setup_place' && playerId === game.setupPlacementOrder[0])
+
               let statusDot = ''
               if (game.phase === 'character_select') statusDot = isDeclared ? '✓' : '...'
               else if (game.phase === 'destination_seal') statusDot = isDestConfirmed ? '✓' : hasTempDest ? '●' : '...'
               else if (game.phase === 'voting') statusDot = hasVoteConfirmed ? '✓' : hasTempVote ? '●' : '...'
 
               return (
-                <div key={playerId} className="bg-zinc-800 rounded-xl p-2">
+                <div key={playerId} className={`rounded-xl p-2 transition-all ${
+                  isCurrentTurn
+                    ? 'bg-yellow-950/60 ring-2 ring-yellow-500'
+                    : 'bg-zinc-800'
+                }`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-3 h-3 rounded-full shrink-0 ${COLOR_BG[player?.color ?? ''] ?? 'bg-zinc-600'}`} />
-                    <span className="text-xs font-medium text-white truncate flex-1">
+                    <span className={`text-xs font-medium truncate flex-1 ${isCurrentTurn ? 'text-yellow-300' : 'text-white'}`}>
+                      {isCurrentTurn && <span className="mr-0.5">▶</span>}
                       {player?.nickname ?? '?'}
                     </span>
                     {isSheriff && <span className="text-yellow-400 text-xs">👮</span>}
