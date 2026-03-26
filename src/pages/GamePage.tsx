@@ -310,10 +310,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               if (survivorState) {
                 await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
               } else if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {}, ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}) })
+                if (revealAnnounce) {
+                  await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+                  await new Promise<void>(r => setTimeout(r, 1500))
+                }
+                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
               } else {
+                if (revealAnnounce) {
+                  await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+                  await new Promise<void>(r => setTimeout(r, 1500))
+                }
                 await hostEndRound(roomCode, { ...updatedGame, hiddenCharacters: {} })
-                if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
               }
             }
             didWork = true
@@ -456,11 +463,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
+      if (revealAnnounce) {
+        await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+        await new Promise<void>(r => setTimeout(r, 1500))
+      }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {}, ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}) })
+        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
       } else {
         await hostEndRound(roomCode, { ...updatedG, hiddenCharacters: {} })
-        if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
       }
     }, remaining)
     return () => clearTimeout(timer)
@@ -637,17 +647,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         return
       }
       const revealAnnounce = buildReveal(g)
+      if (revealAnnounce) {
+        await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce, lastZombieAttackResult: null })
+        await new Promise<void>(r => setTimeout(r, 1500))
+      }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
         await patchGameState(roomCode, {
           currentEventZoneIndex: nextZoneIndex,
           phase: 'event',
           lastZombieAttackResult: null,
           hiddenCharacters: {},
-          ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}),
         })
       } else {
         await hostEndRound(roomCode, { ...g, hiddenCharacters: {} })
-        if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
       }
     }, 4000)
     return () => clearTimeout(timer)
@@ -880,16 +892,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             const owner = players[char.playerId]
             const charConfig = CHARACTER_CONFIGS[char.characterId]
             const isMoving = game!.characterDeclarations[char.playerId]?.characterId === char.id
+            const isHidden = !!(game!.hiddenCharacters?.[char.id])
             return (
               <div
                 key={char.id}
-                title={`${owner?.nickname ?? '?'} — ${charConfig?.name}`}
-                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold text-white
+                title={`${owner?.nickname ?? '?'} — ${charConfig?.name}${isHidden ? ' (숨음)' : ''}`}
+                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
                   ${owner ? (COLOR_BG[owner.color] ?? 'bg-zinc-600') : 'bg-zinc-600'}
-                  ${!char.isAlive ? 'opacity-20' : ''}
-                  ${isMoving ? 'border-yellow-400' : 'border-zinc-600'}`}
+                  ${!char.isAlive ? 'opacity-20 text-white' : isHidden ? 'opacity-30 text-white border-dashed' : 'text-white'}
+                  ${isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
               >
-                {charConfig?.name?.charAt(0) ?? '?'}
+                {isHidden ? '🫥' : (charConfig?.name?.charAt(0) ?? '?')}
               </div>
             )
           })}
