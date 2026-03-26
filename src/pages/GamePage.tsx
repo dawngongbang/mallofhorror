@@ -246,6 +246,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const prevCharZones = useRef<Record<string, string>>({})
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [showRules, setShowRules] = useState(false)
+  const [hoveredCharId, setHoveredCharId] = useState<string | null>(null)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -1211,10 +1212,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               <div
                 key={char.id}
                 title={`${owner?.nickname ?? '?'} — ${charConfig?.name}${isHidden ? ' (숨음)' : ''}`}
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-all
                   ${owner ? (COLOR_BG[owner.color] ?? 'bg-zinc-600') : 'bg-zinc-600'}
                   ${!char.isAlive ? 'opacity-20 text-white' : isHidden ? 'opacity-30 text-white border-dashed' : 'text-white'}
-                  ${isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
+                  ${hoveredCharId === char.id ? 'scale-150 border-white shadow-lg z-10' : isMoving ? 'border-yellow-400' : isHidden ? 'border-purple-500' : 'border-zinc-600'}`}
               >
                 {isHidden ? '🫥' : (CHAR_ICON[char.characterId] ?? charConfig?.name?.charAt(0) ?? '?')}
               </div>
@@ -1502,7 +1503,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   {myAliveChars.map(char => {
                     const charConfig = CHARACTER_CONFIGS[char.characterId]
                     return (
-                      <button key={char.id} onClick={() => handleDeclareCharacter(char.id)}
+                      <button key={char.id}
+                        onClick={() => handleDeclareCharacter(char.id)}
+                        onMouseEnter={() => setHoveredCharId(char.id)}
+                        onMouseLeave={() => setHoveredCharId(null)}
                         disabled={actionLoading}
                         className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white text-sm px-4 py-2 rounded-xl transition-colors">
                         {charConfig?.name ?? char.characterId}
