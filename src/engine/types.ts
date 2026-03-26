@@ -165,6 +165,7 @@ export type GamePhase =
   | 'move_execute'        // 이동④: 순서대로 이동
   | 'event'               // 이벤트 진입 (다음 구역으로 이동)
   | 'zone_announce'       // 구역 상황 공지 (2초 대기 후 처리)
+  | 'weapon_use'          // 습격 직전 무기 사용 기회 (타이머 후 좀비 재계산)
   | 'card_react'          // 투표 전 카드 반응 창 (스프린트/히든카드)
   | 'voting'              // 투표 진행 중 (zombie_attack / truck_search / sheriff)
   | 'check_win'           // 승리 조건 체크
@@ -254,6 +255,9 @@ export interface GameState {
 
   // 이번 라운드 CCTV 아이템을 사용한 플레이어 (라운드 시작 시 초기화)
   cctvViewers: string[]
+
+  // weapon_use 페이즈: 해당 구역에서 무기 사용 또는 패스 확정한 플레이어 (weapon_use 진입 시 초기화)
+  weaponUseStatus: Record<string, boolean>
 
   // 결과
   winners: string[]

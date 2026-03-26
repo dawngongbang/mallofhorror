@@ -179,6 +179,51 @@ export async function submitVictimChoice(
   await set(ref(db, `games/${roomCode}/game/pendingVictimSelection/chosenCharacterId`), characterId)
 }
 
+// ── 플레이어 행동: 무기 아이템 사용 (weapon_use 페이즈) ───────
+// 해당 구역 좀비 수 감소, private items에서 제거, weaponUseStatus 확정
+
+export async function useWeaponItem(
+  roomCode: string,
+  itemInstanceId: string,
+  zone: ZoneName,
+  zombieKill: number,
+  currentItemIds: string[]
+): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+
+  const newItems = [...currentItemIds]
+  const idx = newItems.indexOf(itemInstanceId)
+  if (idx === -1) return
+  newItems.splice(idx, 1)
+
+  const gameRef = ref(db, `games/${roomCode}/game`)
+  const snap = await get(gameRef)
+  const g = snap.val() as GameState | null
+  if (!g) return
+
+  const currentZombies = g.zones?.[zone]?.zombies ?? 0
+  const newZombies = Math.max(0, currentZombies - zombieKill)
+  const newCount = Math.max(0, (g.playerItemCounts?.[uid] ?? 1) - 1)
+
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),
+    update(ref(db, `games/${roomCode}/game`), {
+      [`zones/${zone}/zombies`]: newZombies,
+      [`playerItemCounts/${uid}`]: newCount,
+      [`weaponUseStatus/${uid}`]: true,
+    }),
+  ])
+}
+
+// ── 플레이어 행동: weapon_use 패스 (무기 사용 안 함 확정) ────────
+
+export async function submitWeaponUsePass(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  await set(ref(db, `games/${roomCode}/game/weaponUseStatus/${uid}`), true)
+}
+
 // ── 플레이어 행동: 협박 아이템 사용 (투표 중) ────────────────
 // 현재 투표의 bonusVoteWeights에 +1, private items에서 제거
 

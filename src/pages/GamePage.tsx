@@ -5,7 +5,7 @@ import {
   selectVote, confirmVote,
   patchGameState, subscribeToMyItems, submitItemSearchChoice,
   submitSheriffRollRequest, submitVictimChoice,
-  useThreatItem, useCctvItem,
+  useThreatItem, useCctvItem, useWeaponItem, submitWeaponUsePass,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -42,7 +42,7 @@ const PHASE_LABEL: Record<string, string> = {
   setup_place: '초기 배치', roll_dice: '주사위', dice_reveal: '주사위 공개',
   character_select: '캐릭터 선언', destination_seal: '목적지 선택',
   destination_reveal: '공개', move_execute: '이동',
-  event: '이벤트', zone_announce: '구역 공지', voting: '투표',
+  event: '이벤트', zone_announce: '구역 공지', weapon_use: '아이템 사용', voting: '투표',
   check_win: '승리 체크', finished: '종료',
 }
 
@@ -103,6 +103,7 @@ function normalizeGame(g: GameState): GameState {
     lastVoteAnnounce:       g.lastVoteAnnounce       ?? null,
     lastZombieAttackResult: g.lastZombieAttackResult ?? null,
     cctvViewers:            Array.isArray(g.cctvViewers) ? g.cctvViewers : [],
+    weaponUseStatus:        (g.weaponUseStatus && typeof g.weaponUseStatus === 'object') ? g.weaponUseStatus : {},
   }
 }
 
@@ -227,6 +228,38 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           }
         }
 
+        // weapon_use: 해당 구역 생존 플레이어 전원 확정 시 조기 종료
+        else if (game.phase === 'weapon_use') {
+          const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+          const zoneState = game.zones[zone]
+          const inZonePlayers = [...new Set(
+            zoneState.characterIds
+              .map(id => game.characters[id])
+              .filter(c => c?.isAlive)
+              .map(c => c!.playerId)
+          )]
+          const allConfirmed = inZonePlayers.length === 0 ||
+            inZonePlayers.every(pid => game.weaponUseStatus[pid])
+          if (allConfirmed) {
+            const nextZoneIndex = game.currentEventZoneIndex + 1
+            const voteMs = (meta?.settings.votingTime ?? 60) * 1000
+            const attackState = startZoneAttackPhase(zone, game)
+            if (attackState) {
+              await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
+            } else {
+              const survivorState = startZoneSurvivorPhase(zone, game)
+              if (survivorState) {
+                await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
+              } else if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
+                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+              } else {
+                await hostEndRound(roomCode, game)
+              }
+            }
+            didWork = true
+          }
+        }
+
         // event: 트럭 수색 아이템 선택 대기 중이면 넘어가지 않음
         else if (game.phase === 'event' && !game.currentVote && !game.itemSearchPreview) {
           await patchGameState(roomCode, { phase: 'zone_announce' })
@@ -313,6 +346,38 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           destinationStatus: { ...g.destinationStatus, ...statusPatch },
           ...(Object.keys(sealedPatch).length > 0 ? { sealedDestinations: { ...g.sealedDestinations, ...sealedPatch } as typeof g.sealedDestinations } : {}),
         })
+      }
+    }, remaining)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.phaseDeadline, isHost, roomCode])
+
+  // ── weapon_use 타임아웃: 좀비 재계산 후 투표 or 통과 ─────────
+  useEffect(() => {
+    if (!isHost || game?.phase !== 'weapon_use' || !game.phaseDeadline) return
+    const remaining = game.phaseDeadline - Date.now()
+    if (remaining <= 0) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'weapon_use') return
+      const zone = EVENT_ZONE_ORDER[g.currentEventZoneIndex]
+      const nextZoneIndex = g.currentEventZoneIndex + 1
+      const voteMs = (meta?.settings.votingTime ?? 60) * 1000
+      // 좀비 수 재계산 후 여전히 습격이면 투표로
+      const attackState = startZoneAttackPhase(zone, g)
+      if (attackState) {
+        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
+        return
+      }
+      // 습격 면함 → survivor 이벤트 체크
+      const survivorState = startZoneSurvivorPhase(zone, g)
+      if (survivorState) {
+        await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
+        return
+      }
+      if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
+        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+      } else {
+        await hostEndRound(roomCode, g)
       }
     }, remaining)
     return () => clearTimeout(timer)
@@ -435,7 +500,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const voteMs = (meta?.settings.votingTime ?? 60) * 1000
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
-        await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
+        // 습격 발생 → 무기 사용 기회 먼저 (15초)
+        await patchGameState(roomCode, { phase: 'weapon_use', phaseDeadline: Date.now() + 15000, weaponUseStatus: {} })
         return
       }
       const survivorState = startZoneSurvivorPhase(zone, g)
@@ -595,9 +661,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         await useCctvItem(roomCode, instanceId, myItemIds)
       } else if (itemId === 'threat') {
         await useThreatItem(roomCode, instanceId, myItemIds)
+      } else {
+        // 무기 아이템 (axe, pistol, shotgun, bat, grenade, chainsaw)
+        const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
+        if (cfg?.zombieKill && game) {
+          const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+          await useWeaponItem(roomCode, instanceId, zone, cfg.zombieKill, myItemIds)
+        }
       }
     } finally {
       setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
+      setActionLoading(false)
+    }
+  }
+
+  async function handleWeaponUsePass() {
+    if (actionLoading) return
+    setActionLoading(true)
+    try {
+      await submitWeaponUsePass(roomCode)
+    } finally {
       setActionLoading(false)
     }
   }
@@ -1073,6 +1156,57 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       }
 
+      // ── 아이템 사용 (습격 직전) ───────────────────────────────
+      case 'weapon_use': {
+        const zone = EVENT_ZONE_ORDER[game!.currentEventZoneIndex]
+        const config = ZONE_CONFIGS[zone]
+        const zoneState = game!.zones[zone]
+        const defense = calcDefense(zone, game!)
+
+        // 해당 구역에 내 캐릭터가 있는지
+        const myCharsInZone = zoneState.characterIds.filter(
+          id => game!.characters[id]?.playerId === uid && game!.characters[id]?.isAlive
+        )
+        const amInZone = myCharsInZone.length > 0
+
+        return (
+          <div className="text-center">
+            <p className="text-xs text-zinc-500 mb-1">아이템 사용 기회</p>
+            <p className="text-lg font-bold text-white mb-1">
+              #{config.zoneNumber} {config.displayName}
+            </p>
+            <div className="flex justify-center gap-4 mb-3 text-sm text-zinc-300">
+              <span>🧟 좀비 <strong className="text-red-400">{zoneState.zombies}</strong></span>
+              <span>🛡 방어 <strong className="text-white">{defense}</strong></span>
+            </div>
+            <p className="text-red-400 font-bold mb-3">⚠️ 좀비가 습격합니다!</p>
+            {amInZone ? (
+              game!.weaponUseStatus[uid ?? ''] ? (
+                <p className="text-green-400 text-sm font-bold">✓ 완료 — 다른 플레이어 대기 중...</p>
+              ) : (
+                <div>
+                  <p className="text-yellow-300 text-sm mb-3">아이템 패널에서 무기를 사용하거나 넘어가세요.</p>
+                  <button
+                    onClick={handleWeaponUsePass}
+                    disabled={actionLoading}
+                    className="text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    사용 안 함
+                  </button>
+                </div>
+              )
+            ) : (
+              <p className="text-zinc-500 text-sm">해당 구역 플레이어들이 아이템 사용 중...</p>
+            )}
+            {countdown !== null && (
+              <p className={`text-lg font-mono font-bold mt-3 ${countdown <= 5 ? 'text-red-400' : 'text-zinc-400'}`}>
+                ⏰ {countdown}초
+              </p>
+            )}
+          </div>
+        )
+      }
+
       // ── 이벤트 처리 / 트럭 수색 선택 ────────────────────────
       case 'event': {
         const preview = game!.itemSearchPreview
@@ -1542,7 +1676,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   // 사용 가능한 아이템 여부
                   const canUseCctv = itemId === 'cctv' && !!game.lastDiceRoll && !game.cctvViewers.includes(uid ?? '')
                   const canUseThreat = itemId === 'threat' && game.phase === 'voting' && !!game.currentVote
-                  const isUsable = canUseCctv || canUseThreat
+                  const weaponItemIds = ['axe', 'pistol', 'shotgun', 'bat', 'grenade', 'chainsaw']
+                  const amInWeaponZone = game.phase === 'weapon_use' && (() => {
+                    const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+                    return game.zones[zone]?.characterIds.some(
+                      id => game.characters[id]?.playerId === uid && game.characters[id]?.isAlive
+                    ) ?? false
+                  })()
+                  const canUseWeapon = weaponItemIds.includes(itemId) && amInWeaponZone && !game.weaponUseStatus[uid ?? '']
+                  const isUsable = canUseCctv || canUseThreat || canUseWeapon
 
                   const isConfirming = confirmingItems.has(instanceId)
 

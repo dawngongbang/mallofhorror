@@ -109,6 +109,7 @@ export function initRoundState(state: GameState): GameState {
     itemSearchPreview: null,
     lastZombieAttackResult: null,
     cctvViewers: [],
+    weaponUseStatus: {},
   }
 }
 

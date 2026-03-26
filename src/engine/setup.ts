@@ -90,6 +90,7 @@ export function createInitialGameState(
     lastZombieAttackResult: null,
 
     cctvViewers: [],
+    weaponUseStatus: {},
 
     winners: [],
     finalScores: {},
