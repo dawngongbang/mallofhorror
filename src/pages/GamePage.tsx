@@ -32,6 +32,55 @@ const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: 
   parking:     { left: '28%', top: '40%', width: '40%' }, // 중앙
 }
 
+// 구역 오버레이 중심 좌표 (컨테이너 기준 %)
+function getZoneCenter(zoneName: ZoneName): { x: number; y: number } {
+  const pos = ZONE_MAP_POSITIONS[zoneName]
+  const w = parseFloat(pos.width ?? '29')
+  return {
+    x: parseFloat(pos.left) + w / 2,
+    y: parseFloat(pos.top) + 8,  // 카드 높이 절반 근사치
+  }
+}
+
+interface MovingTokenProps {
+  fromZone: ZoneName
+  toZone: ZoneName
+  color: string
+  label: string
+}
+
+function MovingToken({ fromZone, toZone, color, label }: MovingTokenProps) {
+  const [pos, setPos] = useState(getZoneCenter(fromZone))
+
+  useEffect(() => {
+    // 한 프레임 후 목적지로 이동 시작
+    const t = setTimeout(() => setPos(getZoneCenter(toZone)), 30)
+    return () => clearTimeout(t)
+  }, [toZone])
+
+  const COLOR_BG_TOKEN: Record<string, string> = {
+    red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
+    yellow: 'bg-yellow-400', purple: 'bg-purple-500', orange: 'bg-orange-500',
+  }
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${pos.x}%`,
+        top: `${pos.y}%`,
+        transform: 'translate(-50%, -50%)',
+        transition: 'left 0.85s cubic-bezier(0.4, 0, 0.2, 1), top 0.85s cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: 50,
+        pointerEvents: 'none',
+      }}
+      className={`w-7 h-7 rounded-full border-2 border-yellow-400 shadow-xl flex items-center justify-center text-xs font-bold text-white ${COLOR_BG_TOKEN[color] ?? 'bg-zinc-600'}`}
+    >
+      {label}
+    </div>
+  )
+}
+
 // instanceId 예: "hidden_card_0", "sprint_2", "axe_0" → itemId 추출
 function instanceIdToItemId(instanceId: string): string {
   const parts = instanceId.split('_')
@@ -163,6 +212,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
   const processingRef = useRef(false)
   const [countdown, setCountdown] = useState<number | null>(null)
+  // 이동 애니메이션
+  interface MovingTokenState { uid: string; playerId: string; fromZone: ZoneName; toZone: ZoneName; label: string }
+  const [movingTokens, setMovingTokens] = useState<MovingTokenState[]>([])
+  const prevCharZones = useRef<Record<string, ZoneName>>({})
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [showRules, setShowRules] = useState(false)
   const uid = getCurrentUid()
@@ -174,6 +227,37 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const unsubItems = uid ? subscribeToMyItems(roomCode, uid, setMyItemIds) : () => {}
     return () => { unsubGame(); unsubPlayers(); unsubMeta(); unsubItems() }
   }, [roomCode, uid])
+
+  // 캐릭터 이동 애니메이션 감지
+  useEffect(() => {
+    if (!game) return
+    const chars = game.characters
+    const prev = prevCharZones.current
+    const initialized = Object.keys(prev).length > 0
+    const newTokens: MovingTokenState[] = []
+
+    for (const [charId, char] of Object.entries(chars)) {
+      const prevZone = prev[charId]
+      if (initialized && prevZone && prevZone !== char.zone && char.isAlive) {
+        const charConfig = CHARACTER_CONFIGS[char.characterId]
+        newTokens.push({
+          uid: `${charId}_${Date.now()}`,
+          playerId: char.playerId,
+          fromZone: prevZone,
+          toZone: char.zone as ZoneName,
+          label: charConfig?.name?.charAt(0) ?? '?',
+        })
+      }
+      prev[charId] = char.zone as ZoneName
+    }
+
+    if (newTokens.length > 0) {
+      setMovingTokens(p => [...p, ...newTokens])
+      setTimeout(() => {
+        setMovingTokens(p => p.filter(t => !newTokens.find(n => n.uid === t.uid)))
+      }, 1300)
+    }
+  }, [game?.characters])
 
   // weapon_use 페이즈 이탈 시 staged 초기화
   useEffect(() => {
@@ -928,6 +1012,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     } else if (itemId === 'hidden_card') {
       // 숨기 아이템: stage하고 캐릭터 선택 대기
       setStagedHideItemId(instanceId)
+      setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
+    } else if (itemId === 'sprint') {
+      setStagedSprintItemId(instanceId)
+      setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
+    } else if (itemId === 'hardware') {
+      setStagedHardwareItemId(instanceId)
       setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
     } else {
       // 무기 아이템: stage에 추가 (즉시 Firebase 기록 안 함)
@@ -2110,6 +2200,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               className="w-full h-full object-cover rounded-xl"
             />
             {ZONE_ORDER.map(renderZone)}
+            {/* 이동 애니메이션 토큰 */}
+            {movingTokens.map(t => {
+              const owner = players[t.playerId]
+              return (
+                <MovingToken
+                  key={t.uid}
+                  fromZone={t.fromZone}
+                  toZone={t.toZone}
+                  color={owner?.color ?? 'zinc'}
+                  label={t.label}
+                />
+              )
+            })}
           </div>
           {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
           {game.phase === 'setup_place' && (
@@ -2190,9 +2293,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   })()
                   const isStaged = stagedWeapons.has(instanceId)
                   const isHideStaged = stagedHideItemId === instanceId
-                  const canUseWeapon = weaponItemIds.includes(itemId) && amInWeaponZone && !game.weaponUseStatus[uid ?? ''] && !isStaged
-                  const canUseHide = itemId === 'hidden_card' && amInWeaponZone && !game.weaponUseStatus[uid ?? ''] && !stagedHideItemId
-                  const isUsable = canUseCctv || canUseThreat || canUseWeapon || canUseHide
+                  const isSprintStaged = stagedSprintItemId === instanceId
+                  const isHardwareStaged = stagedHardwareItemId === instanceId
+                  const notConfirmed = !game.weaponUseStatus[uid ?? '']
+                  const canUseWeapon = weaponItemIds.includes(itemId) && amInWeaponZone && notConfirmed && !isStaged
+                  const canUseHide = itemId === 'hidden_card' && amInWeaponZone && notConfirmed && !stagedHideItemId
+                  const canUseSprint = itemId === 'sprint' && amInWeaponZone && notConfirmed && !stagedSprintItemId
+                  const canUseHardware = itemId === 'hardware' && amInWeaponZone && notConfirmed && !stagedHardwareItemId
+                  const isUsable = canUseCctv || canUseThreat || canUseWeapon || canUseHide || canUseSprint || canUseHardware
 
                   const isConfirming = confirmingItems.has(instanceId)
 
@@ -2203,6 +2311,69 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                         <span className="text-sm">🫥</span>
                         <span className="text-xs text-purple-300 font-bold">숨기 ✓</span>
                         <button onClick={() => { setStagedHideItemId(null); setStagedHideCharId(null) }}
+                          className="text-xs text-zinc-400 hover:text-red-400 px-1 transition-colors">
+                          해제
+                        </button>
+                      </div>
+                    )
+                  }
+
+                  // staged 스프린트: 캐릭터 + 목적지 선택
+                  if (isSprintStaged) {
+                    const weaponZone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+                    const myCharsInZone = Object.values(game.characters).filter(c =>
+                      c.playerId === uid && c.isAlive && c.zone === weaponZone && !game.hiddenCharacters?.[c.id]
+                    )
+                    const availableZones = (Object.keys(ZONE_CONFIGS) as ZoneName[]).filter(z => {
+                      if (z === weaponZone) return false
+                      const cfg = ZONE_CONFIGS[z]
+                      if (cfg.maxCapacity === Infinity) return true
+                      return game.zones[z].characterIds.filter(id => game.characters[id]?.isAlive).length < cfg.maxCapacity
+                    })
+                    return (
+                      <div key={instanceId} className="flex flex-col gap-1.5 bg-zinc-800 border border-cyan-600 rounded-lg px-2.5 py-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-cyan-300 font-bold">👟 스프린트</span>
+                          <button onClick={() => { setStagedSprintItemId(null); setStagedSprintCharId(null); setStagedSprintTargetZone(null) }}
+                            className="text-xs text-zinc-400 hover:text-red-400 transition-colors">해제</button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {myCharsInZone.map(c => {
+                            const cc = CHARACTER_CONFIGS[c.characterId]
+                            return (
+                              <button key={c.id} onClick={() => setStagedSprintCharId(c.id)}
+                                className={`text-xs px-1.5 py-0.5 rounded transition-colors ${stagedSprintCharId === c.id ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}>
+                                {cc?.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {stagedSprintCharId && (
+                          <div className="flex flex-wrap gap-1">
+                            {availableZones.map(z => (
+                              <button key={z} onClick={() => setStagedSprintTargetZone(z)}
+                                className={`text-xs px-1.5 py-0.5 rounded transition-colors ${stagedSprintTargetZone === z ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}>
+                                {ZONE_CONFIGS[z].displayName}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {stagedSprintCharId && stagedSprintTargetZone && (
+                          <span className="text-xs text-cyan-400">
+                            {CHARACTER_CONFIGS[game.characters[stagedSprintCharId]?.characterId]?.name} → {ZONE_CONFIGS[stagedSprintTargetZone].displayName} ✓
+                          </span>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  // staged 하드웨어: 즉시 확정
+                  if (isHardwareStaged) {
+                    return (
+                      <div key={instanceId} className="flex items-center gap-1.5 bg-zinc-800 border border-orange-600 rounded-lg px-2.5 py-1.5">
+                        <span className="text-sm">🔧</span>
+                        <span className="text-xs text-orange-300 font-bold">하드웨어 ✓ (+1 방어)</span>
+                        <button onClick={() => setStagedHardwareItemId(null)}
                           className="text-xs text-zinc-400 hover:text-red-400 px-1 transition-colors">
                           해제
                         </button>
