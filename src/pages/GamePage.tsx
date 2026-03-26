@@ -1175,13 +1175,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 <p className="text-green-400 text-sm font-bold">✓ 완료 — 다른 플레이어 대기 중...</p>
               ) : (
                 <div>
-                  <p className="text-yellow-300 text-sm mb-3">아이템 패널에서 무기를 사용하거나 넘어가세요.</p>
+                  <p className="text-yellow-300 text-sm mb-3">아이템 패널에서 무기를 여러 장 사용할 수 있습니다.</p>
                   <button
                     onClick={handleWeaponUsePass}
                     disabled={actionLoading}
-                    className="text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    className="text-sm bg-zinc-600 hover:bg-zinc-500 text-white font-bold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                   >
-                    사용 안 함
+                    완료
                   </button>
                 </div>
               )

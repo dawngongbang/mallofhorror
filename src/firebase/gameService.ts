@@ -211,7 +211,6 @@ export async function useWeaponItem(
     update(ref(db, `games/${roomCode}/game`), {
       [`zones/${zone}/zombies`]: newZombies,
       [`playerItemCounts/${uid}`]: newCount,
-      [`weaponUseStatus/${uid}`]: true,
     }),
   ])
 }
