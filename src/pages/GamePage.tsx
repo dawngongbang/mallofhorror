@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   subscribeToGame, declareCharacter,
   selectDestination, confirmDestination,
@@ -25,11 +25,11 @@ const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'secur
 // 맵 이미지 위 구역 오버레이 위치 (컨테이너 기준 %)
 const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: string }> = {
   security:    { left: '33%', top:  '8%' },   // 12시
-  supermarket: { left: '64%', top: '28%' },   // 2시반
-  bathroom:    { left: '64%', top: '68%' },   // 4-5시
+  supermarket: { left: '67%', top: '31%' },   // 2시45분
+  bathroom:    { left: '65%', top: '73%' },   // 5시
   clothing:    { left:  '5%', top: '72%' },   // 7시
-  toy:         { left:  '3%', top: '30%' },   // 10시
-  parking:     { left: '28%', top: '40%', width: '40%' }, // 중앙
+  toy:         { left:  '4%', top: '22%' },   // 10시반
+  parking:     { left: '28%', top: '40%', width: '36%' }, // 중앙
 }
 
 // 구역 오버레이 중심 좌표 (컨테이너 기준 %)
@@ -42,16 +42,10 @@ function getZoneCenter(zoneName: ZoneName): { x: number; y: number } {
   }
 }
 
-// 플레이어 스폰 위치 (맵 아래쪽에 플레이어별로 배치)
-function getPlayerSpawnPos(playerIndex: number): { x: number; y: number } {
-  const positions = [
-    { x: 15, y: 93 },
-    { x: 50, y: 96 },
-    { x: 82, y: 93 },
-    { x:  5, y: 60 },
-    { x: 92, y: 60 },
-  ]
-  return positions[playerIndex % positions.length] ?? { x: 50, y: 93 }
+// 플레이어 스폰 위치 — 맵 오른쪽 가장자리 (플레이어 사이드바 방향)
+function getPlayerSpawnPos(playerIndex: number, totalPlayers: number): { x: number; y: number } {
+  const y = totalPlayers <= 1 ? 50 : 15 + (playerIndex / Math.max(1, totalPlayers - 1)) * 70
+  return { x: 97, y }
 }
 
 const COLOR_BG_TOKEN: Record<string, string> = {
@@ -262,8 +256,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     return () => { unsubGame(); unsubPlayers(); unsubMeta(); unsubItems() }
   }, [roomCode, uid])
 
-  // 캐릭터 이동 애니메이션 감지
-  useEffect(() => {
+  // 캐릭터 이동 애니메이션 감지 (페인트 전에 transit 처리 → 목적지 플래시 방지)
+  useLayoutEffect(() => {
     if (!game) return
     const chars = game.characters
     const prev = prevCharZones.current
@@ -282,7 +276,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         // 이전 존이 맵에 있는 존이면 거기서 출발, 없으면(초기 배치 등) 플레이어 스폰 위치
         const fromPos = prevZoneStr && ZONE_MAP_POSITIONS[prevZoneStr as ZoneName]
           ? getZoneCenter(prevZoneStr as ZoneName)
-          : getPlayerSpawnPos(playerIndex)
+          : getPlayerSpawnPos(playerIndex, game.playerOrder.length)
 
         // 스프린트 바운스: 주차장으로 갔는데 이전 구역도 주차장이 아닌 경우,
         // pendingSprintChoices에서 의도한 목적지 찾기
@@ -1226,11 +1220,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </div>
             )
           })}
-          {chars.filter(c => c.isAlive).length > 0 && (
-            <span className="text-zinc-500 text-[10px] self-center ml-0.5">
-              {chars.filter(c => c.isAlive).length}/{config.maxCapacity === Infinity ? '∞' : config.maxCapacity}
-            </span>
-          )}
+          {chars.filter(c => c.isAlive).length > 0 && (() => {
+            const aliveCount = chars.filter(c => c.isAlive).length
+            const isFull = config.maxCapacity !== Infinity && aliveCount >= config.maxCapacity
+            return (
+              <span className={`text-[10px] self-center ml-0.5 font-semibold ${isFull ? 'text-red-400' : 'text-zinc-500'}`}>
+                {aliveCount}/{config.maxCapacity === Infinity ? '∞' : config.maxCapacity}
+              </span>
+            )
+          })()}
         </div>
 
         {/* 주차장 트럭 */}
