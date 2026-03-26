@@ -1155,33 +1155,53 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
     const pos = ZONE_MAP_POSITIONS[zoneName]
 
-    // destination_seal: 선택 가능한 구역 (이동 캐릭터 현재 구역 제외, 폐쇄 제외, 미확정)
+    // destination_seal: 선택 가능한 구역
     const isMyTurnToSelect = game!.phase === 'character_select' && currentDeclarerId === uid && !myDeclaredCharId
     const isDestSelectable = game!.phase === 'destination_seal'
       && !myDestConfirmed
       && zoneName !== myMovingCharData?.zone
       && !zoneState.isClosed
+    const isDestInvalid = game!.phase === 'destination_seal'
+      && !myDestConfirmed
+      && !isDestSelectable
     const isSelectedDest = mySealedZone === zoneName
     const isHoveredDest = hoveredZone === zoneName && isDestSelectable
+
+    // setup_place: 내 차례 + 주사위 굴린 후 + 캐릭터 선택 후
+    const isSetupPlaceable = game!.phase === 'setup_place'
+      && isMyTurnToPlace
+      && !!game!.setupDiceRoll
+      && !!selectedSetupCharId
+      && setupZoneOptions.includes(zoneName)
+    const isSetupInvalid = game!.phase === 'setup_place'
+      && isMyTurnToPlace
+      && !!game!.setupDiceRoll
+      && !!selectedSetupCharId
+      && !setupZoneOptions.includes(zoneName)
+    const isHoveredSetup = hoveredZone === zoneName && isSetupPlaceable
 
     return (
       <div
         key={zoneName}
         style={{ left: pos.left, top: pos.top, width: pos.width ?? '29%' }}
-        onClick={isDestSelectable ? () => handleSelectDestination(zoneName) : undefined}
-        onMouseEnter={isDestSelectable ? () => setHoveredZone(zoneName) : undefined}
-        onMouseLeave={isDestSelectable ? () => setHoveredZone(null) : undefined}
+        onClick={
+          isDestSelectable ? () => handleSelectDestination(zoneName)
+          : isSetupPlaceable ? () => handlePlaceCharacter(selectedSetupCharId!, zoneName)
+          : undefined
+        }
+        onMouseEnter={(isDestSelectable || isSetupPlaceable) ? () => setHoveredZone(zoneName) : undefined}
+        onMouseLeave={(isDestSelectable || isSetupPlaceable) ? () => setHoveredZone(null) : undefined}
         className={`absolute rounded-lg p-1.5 flex flex-col gap-1 text-xs backdrop-blur-sm transition-all z-10
-          ${isDestSelectable ? 'cursor-pointer' : ''}
+          ${(isDestSelectable || isSetupPlaceable) ? 'cursor-pointer' : ''}
           ${zoneState.isClosed
             ? 'bg-zinc-950/85 opacity-70 ring-1 ring-zinc-700'
             : isSelectedDest  ? 'bg-blue-950/90 ring-2 ring-blue-400 z-20'
-            : isHoveredDest   ? 'bg-blue-900/85 ring-2 ring-blue-400/70 z-20'
+            : isHoveredDest || isHoveredSetup ? 'bg-blue-900/85 ring-2 ring-blue-400/70 z-20'
+            : isDestInvalid || isSetupInvalid ? 'bg-red-950/60 ring-1 ring-red-800/60 opacity-70'
             : isVotingZone    ? 'bg-red-950/90 ring-2 ring-red-500 z-20'
             : isWeaponZone    ? 'bg-orange-950/90 ring-2 ring-orange-400 z-20'
             : isAnnounceZone  ? 'bg-yellow-950/90 ring-2 ring-yellow-400 z-20'
             : isEventZone     ? 'bg-zinc-900/90 ring-2 ring-yellow-600 z-20'
-            : isDestSelectable? 'bg-zinc-950/80 ring-1 ring-zinc-600 hover:ring-blue-500/70'
             : 'bg-zinc-950/80 ring-1 ring-zinc-700/60'}`}
       >
         {/* 구역명 + 상태 배지 */}
