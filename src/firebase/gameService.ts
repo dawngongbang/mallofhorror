@@ -209,7 +209,9 @@ export async function submitWeaponConfirm(
     [`playerItemCounts/${uid}`]: newCount,
     [`weaponUseStatus/${uid}`]: true,
   }
-  if (hideCharId) gamePatch[`hiddenCharacters/${hideCharId}`] = true
+  // 숨기 아이템: hiddenCharacters에 직접 쓰지 않고 pendingHideChoices에 기록
+  // 호스트가 weapon_use 전원 확정 후 hiddenCharacters로 이동 → 다른 플레이어에게 비공개 유지
+  if (hideCharId) gamePatch[`pendingHideChoices/${uid}`] = hideCharId
 
   await Promise.all([
     set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),

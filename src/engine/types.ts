@@ -262,7 +262,11 @@ export interface GameState {
   // weapon_use 페이즈: 플레이어별 무기 kill 수 (확정 시 기록, 호스트가 전원 확정 후 일괄 적용)
   weaponKillChoices: Record<string, number>
 
-  // weapon_use 페이즈: 숨기 아이템으로 숨은 캐릭터 (characterId → true, 해당 구역 처리 완료 시 초기화)
+  // weapon_use 페이즈: 숨기 아이템 대기 중 (playerId → charId, 전원 확정 후 호스트가 hiddenCharacters로 이동)
+  // 플레이어만 + 호스트만 읽기 가능 (다른 플레이어에게 비공개)
+  pendingHideChoices: Record<string, string>
+
+  // weapon_use 종료 후 확정된 숨김 (charId → true, 해당 구역 처리 완료 시 초기화)
   // 숨은 캐릭터는 방어·투표 참여·투표 대상에서 제외되지만 구역 인원수에는 포함
   hiddenCharacters: Record<string, boolean>
 

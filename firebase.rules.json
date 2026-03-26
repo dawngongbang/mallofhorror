@@ -94,9 +94,10 @@
             }
           },
 
-          "hiddenCharacters": {
-            "$charId": {
-              ".write": "auth != null && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use' && root.child('games').child($roomId).child('game/characters').child($charId).child('playerId').val() === auth.uid"
+          "pendingHideChoices": {
+            "$playerId": {
+              ".read": "auth.uid === $playerId || auth.uid === root.child('games').child($roomId).child('meta/hostId').val()",
+              ".write": "auth.uid === $playerId && root.child('games').child($roomId).child('game/phase').val() === 'weapon_use'"
             }
           },
 

@@ -111,6 +111,7 @@ export function initRoundState(state: GameState): GameState {
     cctvViewers: [],
     weaponUseStatus: {},
     weaponKillChoices: {},
+    pendingHideChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
     zombiePlayerZoneChoices: {},

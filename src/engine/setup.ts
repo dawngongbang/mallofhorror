@@ -92,6 +92,7 @@ export function createInitialGameState(
     cctvViewers: [],
     weaponUseStatus: {},
     weaponKillChoices: {},
+    pendingHideChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
     zombiePlayerZoneChoices: {},

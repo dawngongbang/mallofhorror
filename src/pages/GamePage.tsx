@@ -108,6 +108,7 @@ function normalizeGame(g: GameState): GameState {
     cctvViewers:            Array.isArray(g.cctvViewers) ? g.cctvViewers : [],
     weaponUseStatus:        (g.weaponUseStatus && typeof g.weaponUseStatus === 'object') ? g.weaponUseStatus : {},
     weaponKillChoices:      (g.weaponKillChoices && typeof g.weaponKillChoices === 'object') ? g.weaponKillChoices : {},
+    pendingHideChoices:     (g.pendingHideChoices && typeof g.pendingHideChoices === 'object') ? g.pendingHideChoices : {},
     hiddenCharacters:       (g.hiddenCharacters && typeof g.hiddenCharacters === 'object') ? g.hiddenCharacters : {},
     lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
     lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce
@@ -283,22 +284,34 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               zones: { ...game.zones, [zone]: { ...game.zones[zone], zombies: newZombies } },
               weaponKillChoices: {},
             }
-            // 무기 사용 공지
+            // 무기 사용 공지 (무기를 실제로 사용했을 때만)
             const killsByPlayer: Record<string, number> = {}
             for (const [pid, k] of Object.entries(killChoices)) {
               if (k > 0) killsByPlayer[pid] = k
             }
-            const weaponAnnounce = { zone, killsByPlayer, totalKill, remainingZombies: newZombies }
-            // 숨기 아이템 공지 (hide announce)
-            const hiddenEntries = Object.keys(game.hiddenCharacters ?? {}).map(charId => ({
-              playerId: game.characters[charId]?.playerId ?? '',
+            const weaponAnnounce = totalKill > 0
+              ? { zone, killsByPlayer, totalKill, remainingZombies: newZombies }
+              : null
+            // 숨기 아이템 공지 (hide announce) — pendingHideChoices에서 읽음
+            const pendingHides = game.pendingHideChoices ?? {}
+            const hiddenEntries = Object.entries(pendingHides).map(([pid, charId]) => ({
+              playerId: pid,
               charId,
               zone,
-            })).filter(e => e.playerId)
+            })).filter(e => game.characters[e.charId])
+            const newHiddenChars = Object.fromEntries(
+              Object.values(pendingHides).map(charId => [charId, true])
+            )
             const hideAnnounce = hiddenEntries.length > 0
               ? { type: 'hide' as const, entries: hiddenEntries }
               : null
-            await patchGameState(roomCode, { zones: updatedGame.zones, weaponKillChoices: {}, lastWeaponUseAnnounce: weaponAnnounce, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
+            await patchGameState(roomCode, {
+              zones: updatedGame.zones,
+              weaponKillChoices: {},
+              pendingHideChoices: {},
+              ...(weaponAnnounce ? { lastWeaponUseAnnounce: weaponAnnounce } : {}),
+              ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenChars } : {}),
+            })
             const attackState = startZoneAttackPhase(zone, updatedGame)
             if (attackState) {
               await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
@@ -442,14 +455,27 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       for (const [pid, k] of Object.entries(killChoicesG)) {
         if (k > 0) killsByPlayerG[pid] = k
       }
-      const weaponAnnounceG = { zone, killsByPlayer: killsByPlayerG, totalKill, remainingZombies: newZombies }
-      const hiddenEntries = Object.keys(g.hiddenCharacters ?? {}).map(charId => ({
-        playerId: g.characters[charId]?.playerId ?? '',
+      const weaponAnnounceG = totalKill > 0
+        ? { zone, killsByPlayer: killsByPlayerG, totalKill, remainingZombies: newZombies }
+        : null
+      // 숨기 아이템 — pendingHideChoices에서 읽음
+      const pendingHidesG = g.pendingHideChoices ?? {}
+      const hiddenEntries = Object.entries(pendingHidesG).map(([pid, charId]) => ({
+        playerId: pid,
         charId,
         zone,
-      })).filter(e => e.playerId)
+      })).filter(e => g.characters[e.charId])
+      const newHiddenCharsG = Object.fromEntries(
+        Object.values(pendingHidesG).map(charId => [charId, true])
+      )
       const hideAnnounce = hiddenEntries.length > 0 ? { type: 'hide' as const, entries: hiddenEntries } : null
-      await patchGameState(roomCode, { zones: updatedG.zones, weaponKillChoices: {}, lastWeaponUseAnnounce: weaponAnnounceG, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
+      await patchGameState(roomCode, {
+        zones: updatedG.zones,
+        weaponKillChoices: {},
+        pendingHideChoices: {},
+        ...(weaponAnnounceG ? { lastWeaponUseAnnounce: weaponAnnounceG } : {}),
+        ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenCharsG } : {}),
+      })
       // 좀비 감소 후 습격 여부 재판정
       const attackState = startZoneAttackPhase(zone, updatedG)
       if (attackState) {

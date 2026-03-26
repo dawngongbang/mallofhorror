@@ -53,6 +53,7 @@ export function createTestState(): GameState {
     cctvViewers: [],
     weaponUseStatus: {},
     weaponKillChoices: {},
+    pendingHideChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
     zombiePlayerZoneChoices: {},
