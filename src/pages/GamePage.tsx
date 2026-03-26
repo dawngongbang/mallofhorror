@@ -124,7 +124,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
   const processingRef = useRef(false)
   const [countdown, setCountdown] = useState<number | null>(null)
-  const [confirmingItem, setConfirmingItem] = useState<{ instanceId: string; itemId: string } | null>(null)
+  const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [showRules, setShowRules] = useState(false)
   const uid = getCurrentUid()
 
@@ -548,7 +548,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         await useThreatItem(roomCode, instanceId, myItemIds)
       }
     } finally {
-      setConfirmingItem(null)
+      setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
       setActionLoading(false)
     }
   }
@@ -1495,7 +1495,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   const canUseThreat = itemId === 'threat' && game.phase === 'voting' && !!game.currentVote
                   const isUsable = canUseCctv || canUseThreat
 
-                  const isConfirming = confirmingItem?.instanceId === instanceId
+                  const isConfirming = confirmingItems.has(instanceId)
 
                   if (isConfirming) {
                     return (
@@ -1505,7 +1505,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                           className="text-xs bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-2 py-0.5 rounded transition-colors">
                           확인
                         </button>
-                        <button onClick={() => setConfirmingItem(null)}
+                        <button onClick={() => setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })}
                           className="text-xs text-zinc-400 hover:text-white px-1 transition-colors">
                           취소
                         </button>
@@ -1516,7 +1516,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   return (
                     <button key={instanceId}
                       title={cfg.description}
-                      onClick={() => isUsable && setConfirmingItem({ instanceId, itemId })}
+                      onClick={() => isUsable && setConfirmingItems(prev => new Set(prev).add(instanceId))}
                       disabled={!isUsable}
                       className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-colors ${
                         isUsable
