@@ -109,7 +109,9 @@ function normalizeGame(g: GameState): GameState {
     weaponKillChoices:      (g.weaponKillChoices && typeof g.weaponKillChoices === 'object') ? g.weaponKillChoices : {},
     hiddenCharacters:       (g.hiddenCharacters && typeof g.hiddenCharacters === 'object') ? g.hiddenCharacters : {},
     lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
-    lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce ?? null,
+    lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce
+                              ? { ...g.lastWeaponUseAnnounce, killsByPlayer: g.lastWeaponUseAnnounce.killsByPlayer ?? {} }
+                              : null,
   }
 }
 

@@ -272,6 +272,12 @@ export interface GameState {
     entries: Array<{ playerId: string; charId: string; zone: ZoneName }>
   } | null
 
+  // 보너스 좀비 결과 (이동 완료 후 결정, 다음 라운드까지 유지)
+  lastBonusZombieResult: {
+    belleZone: ZoneName | null         // 미녀 최다 구역 (동률이면 null)
+    mostCrowdedZone: ZoneName | null   // 인원 최다 구역 (동률이면 null)
+  } | null
+
   // weapon_use 결과 공지 (아이템 사용 타임 종료 후 N초간 표시)
   lastWeaponUseAnnounce: {
     zone: ZoneName

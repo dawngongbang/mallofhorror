@@ -95,6 +95,7 @@ export function createInitialGameState(
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
     lastWeaponUseAnnounce: null,
+    lastBonusZombieResult: null,
 
     winners: [],
     finalScores: {},
