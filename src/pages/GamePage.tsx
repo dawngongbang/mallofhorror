@@ -6,6 +6,7 @@ import {
   patchGameState, subscribeToMyItems, submitItemSearchChoice,
   submitSheriffRollRequest, submitVictimChoice,
   useThreatItem, useCctvItem, submitWeaponConfirm, submitWeaponUsePass,
+  submitZombiePlayerZoneChoice,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -111,6 +112,10 @@ function normalizeGame(g: GameState): GameState {
     lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
     lastWeaponUseAnnounce:  g.lastWeaponUseAnnounce
                               ? { ...g.lastWeaponUseAnnounce, killsByPlayer: g.lastWeaponUseAnnounce.killsByPlayer ?? {} }
+                              : null,
+    zombiePlayerZoneChoices: (g.zombiePlayerZoneChoices && typeof g.zombiePlayerZoneChoices === 'object') ? g.zombiePlayerZoneChoices : {},
+    lastZombiePlayerAnnounce: g.lastZombiePlayerAnnounce
+                              ? { entries: Array.isArray(g.lastZombiePlayerAnnounce.entries) ? g.lastZombiePlayerAnnounce.entries : Object.values(g.lastZombiePlayerAnnounce.entries ?? {}) }
                               : null,
   }
 }
@@ -538,6 +543,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [!!game?.lastWeaponUseAnnounce, isHost, roomCode])
+
+  // ── 좀비 플레이어 공지 → 5초 후 자동 해제 ───────────────────────
+  useEffect(() => {
+    if (!isHost || !game?.lastZombiePlayerAnnounce) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g?.lastZombiePlayerAnnounce) return
+      await patchGameState(roomCode, { lastZombiePlayerAnnounce: null })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [!!game?.lastZombiePlayerAnnounce, isHost, roomCode])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -984,12 +1000,40 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       // ── 주사위 결과 공개 (보안관만 확인 가능) ────────────────────
       case 'dice_reveal': {
+        // 좀비 플레이어 구역 선택 (dice_reveal 중에도 가능)
+        const isZombiePlayerDR = uid ? Object.values(game!.characters)
+          .filter(c => c.playerId === uid).length > 0
+          && Object.values(game!.characters)
+          .filter(c => c.playerId === uid).every(c => !c.isAlive)
+          : false
+        const myZombieChoiceDR = uid ? (game!.zombiePlayerZoneChoices ?? {})[uid] : undefined
+        const zombieSelectorDR = isZombiePlayerDR && !myZombieChoiceDR && (
+          <div className="mt-3">
+            <p className="text-red-400 text-xs font-bold mb-1">🧟 나타날 구역을 선택하세요!</p>
+            <div className="flex flex-wrap gap-1 justify-center">
+              {(Object.keys(game!.zones) as import('../engine/types').ZoneName[])
+                .filter(z => !game!.zones[z].isClosed)
+                .map(z => (
+                  <button key={z} onClick={async () => {
+                    setActionLoading(true)
+                    try { await submitZombiePlayerZoneChoice(roomCode, z) }
+                    finally { setActionLoading(false) }
+                  }} disabled={actionLoading}
+                    className="text-xs bg-zinc-700 hover:bg-red-800 text-zinc-300 hover:text-white px-2 py-1 rounded transition-colors">
+                    {ZONE_CONFIGS[z].displayName}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )
+
         // 실제 보안관만 확인 가능 (CCTV 아이템 미구현으로 추후 추가 예정)
         if (uid !== sheriffId || !game!.isRealSheriff) {
           return (
             <div className="text-center">
               <p className="text-zinc-400 text-sm">보안관이 주사위 결과를 확인 중...</p>
               <p className="text-zinc-600 text-xs mt-1">잠시 후 이동 페이즈가 시작됩니다</p>
+              {zombieSelectorDR}
             </div>
           )
         }
@@ -1015,6 +1059,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             </div>
             <p className="text-zinc-500 text-xs">보너스 좀비(사람/미녀 최다)는 이동 완료 후 결정됩니다</p>
             <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
+            {zombieSelectorDR}
           </div>
         )
       }
@@ -1022,18 +1067,56 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       // ── 주사위 (2라운드~) ────────────────────────────────────
       case 'roll_dice': {
         const isSheriff = uid === sheriffId
+        // 좀비 플레이어: 모든 캐릭터가 죽은 플레이어
+        const isZombiePlayer = uid ? Object.values(game!.characters)
+          .filter(c => c.playerId === uid).length > 0
+          && Object.values(game!.characters)
+          .filter(c => c.playerId === uid).every(c => !c.isAlive)
+          : false
+        const myZombieChoice = uid ? (game!.zombiePlayerZoneChoices ?? {})[uid] : undefined
+
+        const zombieZoneSelector = isZombiePlayer && (
+          <div className="mt-3">
+            <p className="text-red-400 text-xs font-bold mb-1">🧟 좀비가 된 당신! 나타날 구역을 선택하세요.</p>
+            {myZombieChoice ? (
+              <p className="text-green-400 text-xs">✓ {ZONE_CONFIGS[myZombieChoice]?.displayName} 선택 완료</p>
+            ) : (
+              <div className="flex flex-wrap gap-1 justify-center">
+                {(Object.keys(game!.zones) as import('../engine/types').ZoneName[])
+                  .filter(z => !game!.zones[z].isClosed)
+                  .map(z => (
+                    <button key={z} onClick={async () => {
+                      setActionLoading(true)
+                      try { await submitZombiePlayerZoneChoice(roomCode, z) }
+                      finally { setActionLoading(false) }
+                    }} disabled={actionLoading}
+                      className="text-xs bg-zinc-700 hover:bg-red-800 text-zinc-300 hover:text-white px-2 py-1 rounded transition-colors">
+                      {ZONE_CONFIGS[z].displayName}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+        )
+
         if (!isSheriff) {
           return (
-            <p className="text-zinc-400 text-sm">
-              보안관 <span className="text-white font-bold">{players[sheriffId]?.nickname}</span>이 주사위를 굴리는 중...
-            </p>
+            <div className="text-center">
+              <p className="text-zinc-400 text-sm">
+                보안관 <span className="text-white font-bold">{players[sheriffId]?.nickname}</span>이 주사위를 굴리는 중...
+              </p>
+              {zombieZoneSelector}
+            </div>
           )
         }
         return (
-          <button onClick={handleRollDice} disabled={actionLoading}
-            className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
-            {actionLoading ? '처리 중...' : '🎲 좀비 주사위 굴리기'}
-          </button>
+          <div className="text-center">
+            <button onClick={handleRollDice} disabled={actionLoading}
+              className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
+              {actionLoading ? '처리 중...' : '🎲 좀비 주사위 굴리기'}
+            </button>
+            {zombieZoneSelector}
+          </div>
         )
       }
 
@@ -1776,8 +1859,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       </div>
 
-      {/* 숨기/등장 공지 + weapon_use 결과 — fixed 오버레이 (레이아웃 영향 없음) */}
-      {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce) && (
+      {/* 숨기/등장 공지 + weapon_use 결과 + 좀비 플레이어 공지 — fixed 오버레이 */}
+      {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce || game.lastZombiePlayerAnnounce) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none" style={{maxWidth: '90vw'}}>
           {game.lastHideRevealAnnounce && (() => {
             const ann = game.lastHideRevealAnnounce!
@@ -1820,6 +1903,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </div>
             )
           })()}
+          {game.lastZombiePlayerAnnounce && (
+            <div className="px-4 py-2 text-sm text-center font-bold rounded-xl shadow-lg bg-red-950/95 text-red-200">
+              {game.lastZombiePlayerAnnounce.entries.map((e, i) => {
+                const name = players[e.playerId]?.nickname ?? e.playerId
+                const zoneName = ZONE_CONFIGS[e.zone]?.displayName ?? e.zone
+                return <span key={i} className="block">🧟 좀비가 된 {name}님이 {zoneName}에 나타났습니다!</span>
+              })}
+            </div>
+          )}
         </div>
       )}
 

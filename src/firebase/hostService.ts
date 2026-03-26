@@ -120,13 +120,27 @@ export async function hostApplyNextMoveStep(
       next = applyZombiePlacement(next, state.lastDiceRoll)
       next = applyBonusZombies(next)
     }
-    const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0 }
+
+    // 좀비 플레이어 추가 좀비 배치
+    const zombieChoices = state.zombiePlayerZoneChoices ?? {}
+    const zombieEntries: Array<{ playerId: string; zone: import('../engine/types').ZoneName }> = []
+    for (const [playerId, zone] of Object.entries(zombieChoices) as [string, import('../engine/types').ZoneName][]) {
+      if (next.zones[zone]) {
+        next = { ...next, zones: { ...next.zones, [zone]: { ...next.zones[zone], zombies: next.zones[zone].zombies + 1 } } }
+        zombieEntries.push({ playerId, zone })
+      }
+    }
+    const zombieAnnounce = zombieEntries.length > 0 ? { entries: zombieEntries } : null
+
+    const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0, zombiePlayerZoneChoices: {} }
 
     await patchGameState(roomCode, {
       zones: withPhase.zones,
       characters: withPhase.characters,
       phase: 'event',
       currentEventZoneIndex: 0,
+      zombiePlayerZoneChoices: {},
+      ...(zombieAnnounce ? { lastZombiePlayerAnnounce: zombieAnnounce } : {}),
     })
 
     return withPhase

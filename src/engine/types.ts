@@ -278,6 +278,15 @@ export interface GameState {
     mostCrowdedZone: ZoneName | null   // 인원 최다 구역 (동률이면 null)
   } | null
 
+  // 좀비 플레이어: 모든 캐릭터 사망 후 매 라운드 좀비 1마리를 원하는 구역에 배치
+  // 선택은 roll_dice / dice_reveal 페이즈 중에 제출, 이동 완료 후 일반 좀비와 동시 배치
+  zombiePlayerZoneChoices: Record<string, ZoneName>  // playerId → 선택 구역
+
+  // 좀비 플레이어 배치 공지 (이동 완료 후 N초간 표시)
+  lastZombiePlayerAnnounce: {
+    entries: Array<{ playerId: string; zone: ZoneName }>
+  } | null
+
   // weapon_use 결과 공지 (아이템 사용 타임 종료 후 N초간 표시)
   lastWeaponUseAnnounce: {
     zone: ZoneName

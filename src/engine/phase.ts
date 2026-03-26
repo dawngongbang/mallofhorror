@@ -113,6 +113,8 @@ export function initRoundState(state: GameState): GameState {
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    zombiePlayerZoneChoices: {},
+    lastZombiePlayerAnnounce: null,
     lastWeaponUseAnnounce: null,
   }
 }

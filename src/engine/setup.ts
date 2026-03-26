@@ -94,6 +94,8 @@ export function createInitialGameState(
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    zombiePlayerZoneChoices: {},
+    lastZombiePlayerAnnounce: null,
     lastWeaponUseAnnounce: null,
     lastBonusZombieResult: null,
 

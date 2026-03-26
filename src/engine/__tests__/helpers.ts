@@ -55,6 +55,8 @@ export function createTestState(): GameState {
     weaponKillChoices: {},
     hiddenCharacters: {},
     lastHideRevealAnnounce: null,
+    zombiePlayerZoneChoices: {},
+    lastZombiePlayerAnnounce: null,
     lastWeaponUseAnnounce: null,
     lastBonusZombieResult: null,
 

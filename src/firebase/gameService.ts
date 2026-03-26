@@ -308,6 +308,13 @@ export async function submitSheriffRollRequest(roomCode: string): Promise<void> 
   await set(ref(db, `games/${roomCode}/game/sheriffRollRequest`), Date.now())
 }
 
+// ── 좀비 플레이어: 구역 선택 제출 (roll_dice / dice_reveal 중) ──
+export async function submitZombiePlayerZoneChoice(roomCode: string, zone: ZoneName): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  await update(ref(db, `games/${roomCode}/game`), { [`zombiePlayerZoneChoices/${uid}`]: zone })
+}
+
 // ── 호스트 전용: 게임 상태 부분 업데이트 ─────────────────────
 
 export async function patchGameState(
