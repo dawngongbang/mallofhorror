@@ -24,12 +24,12 @@ const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'secur
 
 // 맵 이미지 위 구역 오버레이 위치 (컨테이너 기준 %)
 const ZONE_MAP_POSITIONS: Record<ZoneName, { left: string; top: string; width?: string }> = {
-  toy:         { left:  '1%', top:  '3%' },   // 좌상단
-  security:    { left: '34%', top:  '1%' },   // 상단 중앙
-  supermarket: { left: '67%', top:  '3%' },   // 우상단
-  parking:     { left: '21%', top: '30%', width: '54%' }, // 중앙
-  clothing:    { left:  '1%', top: '67%' },   // 좌하단
-  bathroom:    { left: '67%', top: '67%' },   // 우하단
+  security:    { left: '33%', top:  '8%' },   // 12시
+  supermarket: { left: '64%', top: '28%' },   // 2시반
+  bathroom:    { left: '64%', top: '62%' },   // 4-5시
+  clothing:    { left: '33%', top: '76%' },   // 6-7시
+  toy:         { left:  '3%', top: '30%' },   // 10시
+  parking:     { left: '28%', top: '40%', width: '40%' }, // 중앙
 }
 
 // instanceId 예: "hidden_card_0", "sprint_2", "axe_0" → itemId 추출
