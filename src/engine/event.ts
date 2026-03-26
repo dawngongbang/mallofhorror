@@ -145,6 +145,6 @@ export function applySheriffVoteResult(
 
 function hasAliveCharacters(zone: ZoneName, state: GameState): boolean {
   return state.zones[zone].characterIds.some(
-    id => state.characters[id]?.isAlive
+    id => state.characters[id]?.isAlive && !state.hiddenCharacters?.[id]
   )
 }

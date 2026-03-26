@@ -30,7 +30,7 @@ function instanceIdToItemId(instanceId: string): string {
 
 const ITEM_CATEGORY: Record<string, string> = {
   axe: '🪓', pistol: '🔫', shotgun: '🔫', bat: '🏏', grenade: '💣', chainsaw: '⚙️',
-  sprint: '👟', hidden_card: '🃏', threat: '😤', hardware: '🔧', cctv: '📷',
+  sprint: '👟', hidden_card: '🫥', threat: '😤', hardware: '🔧', cctv: '📷',
 }
 
 const COLOR_BG: Record<string, string> = {
@@ -105,6 +105,8 @@ function normalizeGame(g: GameState): GameState {
     cctvViewers:            Array.isArray(g.cctvViewers) ? g.cctvViewers : [],
     weaponUseStatus:        (g.weaponUseStatus && typeof g.weaponUseStatus === 'object') ? g.weaponUseStatus : {},
     weaponKillChoices:      (g.weaponKillChoices && typeof g.weaponKillChoices === 'object') ? g.weaponKillChoices : {},
+    hiddenCharacters:       (g.hiddenCharacters && typeof g.hiddenCharacters === 'object') ? g.hiddenCharacters : {},
+    lastHideRevealAnnounce: g.lastHideRevealAnnounce ?? null,
   }
 }
 
@@ -120,6 +122,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [myItemIds, setMyItemIds] = useState<string[]>([])
   // weapon_use 페이즈: 로컬에서 선택한 무기 instanceId 목록 (확정 전까지 Firebase 미기록)
   const [stagedWeapons, setStagedWeapons] = useState<Set<string>>(new Set())
+  // weapon_use 페이즈: 숨기 아이템 선택 상태 (instanceId, 숨길 charId)
+  const [stagedHideItemId, setStagedHideItemId] = useState<string | null>(null)
+  const [stagedHideCharId, setStagedHideCharId] = useState<string | null>(null)
   const gameRef = useRef<GameState | null>(null)
   gameRef.current = game  // 항상 최신 game 참조 (stale closure 방지)
   // 트럭 수색 아이템 선택 상태
@@ -142,7 +147,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
   // weapon_use 페이즈 이탈 시 staged 초기화
   useEffect(() => {
-    if (game?.phase !== 'weapon_use') setStagedWeapons(new Set())
+    if (game?.phase !== 'weapon_use') {
+      setStagedWeapons(new Set())
+      setStagedHideItemId(null)
+      setStagedHideCharId(null)
+    }
   }, [game?.phase])
 
   // ── 카운트다운 타이머 ─────────────────────────────────────────
@@ -260,18 +269,31 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               zones: { ...game.zones, [zone]: { ...game.zones[zone], zombies: newZombies } },
               weaponKillChoices: {},
             }
-            await patchGameState(roomCode, { zones: updatedGame.zones, weaponKillChoices: {} })
+            // 숨기 아이템 공지 (hide announce)
+            const hiddenEntries = Object.keys(game.hiddenCharacters ?? {}).map(charId => ({
+              playerId: game.characters[charId]?.playerId ?? '',
+              charId,
+              zone,
+            })).filter(e => e.playerId)
+            const hideAnnounce = hiddenEntries.length > 0
+              ? { type: 'hide' as const, entries: hiddenEntries }
+              : null
+            await patchGameState(roomCode, { zones: updatedGame.zones, weaponKillChoices: {}, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
             const attackState = startZoneAttackPhase(zone, updatedGame)
             if (attackState) {
               await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
             } else {
               const survivorState = startZoneSurvivorPhase(zone, updatedGame)
+              const revealAnnounce = hiddenEntries.length > 0
+                ? { type: 'reveal' as const, entries: hiddenEntries }
+                : null
               if (survivorState) {
                 await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
               } else if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {}, ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}) })
               } else {
-                await hostEndRound(roomCode, updatedGame)
+                await hostEndRound(roomCode, { ...updatedGame, hiddenCharacters: {} })
+                if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
               }
             }
             didWork = true
@@ -388,13 +410,20 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         zones: { ...g.zones, [zone]: { ...g.zones[zone], zombies: newZombies } },
         weaponKillChoices: {},
       }
-      await patchGameState(roomCode, { zones: updatedG.zones, weaponKillChoices: {} })
+      const hiddenEntries = Object.keys(g.hiddenCharacters ?? {}).map(charId => ({
+        playerId: g.characters[charId]?.playerId ?? '',
+        charId,
+        zone,
+      })).filter(e => e.playerId)
+      const hideAnnounce = hiddenEntries.length > 0 ? { type: 'hide' as const, entries: hiddenEntries } : null
+      await patchGameState(roomCode, { zones: updatedG.zones, weaponKillChoices: {}, ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce } : {}) })
       // 좀비 감소 후 습격 여부 재판정
       const attackState = startZoneAttackPhase(zone, updatedG)
       if (attackState) {
         await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
+      const revealAnnounce = hiddenEntries.length > 0 ? { type: 'reveal' as const, entries: hiddenEntries } : null
       // 습격 면함 → survivor 이벤트 체크
       const survivorState = startZoneSurvivorPhase(zone, updatedG)
       if (survivorState) {
@@ -402,9 +431,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         return
       }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {}, ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}) })
       } else {
-        await hostEndRound(roomCode, updatedG)
+        await hostEndRound(roomCode, { ...updatedG, hiddenCharacters: {} })
+        if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
       }
     }, remaining)
     return () => clearTimeout(timer)
@@ -466,6 +496,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     return () => clearTimeout(timer)
   }, [game?.phase, !!game?.lastVoteAnnounce, isHost, roomCode])
 
+  // ── 숨기/등장 공지 → 5초 후 자동 해제 ───────────────────────
+  useEffect(() => {
+    if (!isHost || !game?.lastHideRevealAnnounce) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g?.lastHideRevealAnnounce) return
+      await patchGameState(roomCode, { lastHideRevealAnnounce: null })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [!!game?.lastHideRevealAnnounce, game?.lastHideRevealAnnounce?.type, isHost, roomCode])
+
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
     if (!isHost || !game || game.phase !== 'dice_reveal') return
@@ -504,13 +545,23 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const zone = EVENT_ZONE_ORDER[zoneIndex]
       const nextZoneIndex = zoneIndex + 1
 
+      // 숨은 캐릭터 reveal 공지 헬퍼
+      const buildReveal = (state: typeof g) => {
+        const entries = Object.keys(state.hiddenCharacters ?? {}).map(charId => ({
+          playerId: state.characters[charId]?.playerId ?? '',
+          charId,
+          zone,
+        })).filter(e => e.playerId)
+        return entries.length > 0 ? { type: 'reveal' as const, entries } : null
+      }
+
       // 폐쇄 조건 체크 (좀비 8개 이상 + 사람 없음 → 폐쇄)
       const closedState = checkAndCloseZone(zone, g)
       if (closedState) {
         if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-          await patchGameState(roomCode, { zones: closedState.zones, currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+          await patchGameState(roomCode, { zones: closedState.zones, currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
         } else {
-          await hostEndRound(roomCode, closedState)
+          await hostEndRound(roomCode, { ...closedState, hiddenCharacters: {} })
         }
         return
       }
@@ -518,9 +569,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       // 이미 폐쇄된 구역이면 스킵
       if (g.zones[zone].isClosed) {
         if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-          await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event' })
+          await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
         } else {
-          await hostEndRound(roomCode, g)
+          await hostEndRound(roomCode, { ...g, hiddenCharacters: {} })
         }
         return
       }
@@ -529,7 +580,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
         // 습격 발생 → 무기 사용 기회 먼저 (15초)
-        await patchGameState(roomCode, { phase: 'weapon_use', phaseDeadline: Date.now() + 15000, weaponUseStatus: {} })
+        await patchGameState(roomCode, { phase: 'weapon_use', phaseDeadline: Date.now() + 15000, weaponUseStatus: {}, weaponKillChoices: {} })
         return
       }
       const survivorState = startZoneSurvivorPhase(zone, g)
@@ -537,14 +588,18 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
+      const revealAnnounce = buildReveal(g)
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
         await patchGameState(roomCode, {
           currentEventZoneIndex: nextZoneIndex,
           phase: 'event',
           lastZombieAttackResult: null,
+          hiddenCharacters: {},
+          ...(revealAnnounce ? { lastHideRevealAnnounce: revealAnnounce } : {}),
         })
       } else {
-        await hostEndRound(roomCode, g)
+        await hostEndRound(roomCode, { ...g, hiddenCharacters: {} })
+        if (revealAnnounce) await patchGameState(roomCode, { lastHideRevealAnnounce: revealAnnounce })
       }
     }, 4000)
     return () => clearTimeout(timer)
@@ -697,6 +752,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
         setActionLoading(false)
       }
+    } else if (itemId === 'hidden_card') {
+      // 숨기 아이템: stage하고 캐릭터 선택 대기
+      setStagedHideItemId(instanceId)
+      setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })
     } else {
       // 무기 아이템: stage에 추가 (즉시 Firebase 기록 안 함)
       setStagedWeapons(prev => new Set([...prev, instanceId]))
@@ -704,20 +763,30 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }
   }
 
-  // weapon_use 최종 확정: staged 무기 일괄 제출
+  // weapon_use 최종 확정: staged 무기 + 숨기 일괄 제출
   async function handleWeaponConfirm() {
     if (actionLoading) return
     setActionLoading(true)
     try {
       const staged = [...stagedWeapons]
-      if (staged.length === 0) {
+      const hideItemId = stagedHideItemId
+      // stagedHideCharId 없으면 구역 내 내 첫 캐릭터 자동 선택
+      let resolvedHideCharId = stagedHideCharId
+      if (hideItemId && !resolvedHideCharId && game) {
+        const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+        resolvedHideCharId = game.zones[zone]?.characterIds.find(
+          id => game.characters[id]?.playerId === uid && game.characters[id]?.isAlive
+        ) ?? null
+      }
+      const allStaged = hideItemId ? [...staged, hideItemId] : staged
+      if (allStaged.length === 0 && !resolvedHideCharId) {
         await submitWeaponUsePass(roomCode)
       } else {
         const totalKill = staged.reduce((sum, id) => {
-          const itemId = id.split('_').slice(0, -1).join('_')
-          return sum + (ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]?.zombieKill ?? 0)
+          const iid = id.split('_').slice(0, -1).join('_')
+          return sum + (ITEM_CONFIGS[iid as keyof typeof ITEM_CONFIGS]?.zombieKill ?? 0)
         }, 0)
-        await submitWeaponConfirm(roomCode, staged, totalKill, myItemIds)
+        await submitWeaponConfirm(roomCode, allStaged, totalKill, myItemIds, resolvedHideCharId)
       }
     } finally {
       setActionLoading(false)
@@ -1213,15 +1282,56 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 <p className="text-green-400 text-sm font-bold">✓ 완료 — 다른 플레이어 대기 중...</p>
               ) : (
                 <div>
-                  <p className="text-yellow-300 text-sm mb-2">아이템 패널에서 무기를 선택하세요.</p>
+                  <p className="text-yellow-300 text-sm mb-2">아이템 패널에서 무기·숨기를 선택하세요.</p>
                   {stagedWeapons.size > 0 && (
-                    <p className="text-green-400 text-xs mb-2">
-                      {stagedWeapons.size}장 선택됨 — 완료 시 일괄 사용
-                    </p>
+                    <p className="text-green-400 text-xs mb-1">무기 {stagedWeapons.size}장 선택됨</p>
                   )}
+                  {/* 숨기 캐릭터 선택 UI */}
+                  {stagedHideItemId && (() => {
+                    const myCharsInZone = game!.zones[zone]?.characterIds
+                      .filter(id => game!.characters[id]?.playerId === uid && game!.characters[id]?.isAlive) ?? []
+                    return (
+                      <div className="mb-2">
+                        {myCharsInZone.length <= 1 ? (
+                          <p className="text-purple-300 text-xs">
+                            🫥 <strong>{CHARACTER_CONFIGS[game!.characters[myCharsInZone[0]]?.characterId]?.name ?? '?'}</strong> 숨김 예정
+                          </p>
+                        ) : (
+                          <div>
+                            <p className="text-purple-300 text-xs mb-1">🫥 숨길 캐릭터 선택:</p>
+                            <div className="flex gap-2 flex-wrap justify-center">
+                              {myCharsInZone.map(charId => {
+                                const char = game!.characters[charId]
+                                const cfg = CHARACTER_CONFIGS[char?.characterId]
+                                return (
+                                  <button key={charId}
+                                    onClick={() => setStagedHideCharId(charId)}
+                                    className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                                      stagedHideCharId === charId
+                                        ? 'bg-purple-700 border-purple-400 text-white font-bold'
+                                        : 'bg-zinc-700 border-zinc-500 text-zinc-300 hover:border-purple-400'
+                                    }`}>
+                                    {cfg?.name ?? charId}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <button onClick={() => { setStagedHideItemId(null); setStagedHideCharId(null) }}
+                          className="text-xs text-zinc-500 hover:text-red-400 mt-1 transition-colors">
+                          숨기 취소
+                        </button>
+                      </div>
+                    )
+                  })()}
                   <button
                     onClick={handleWeaponConfirm}
-                    disabled={actionLoading}
+                    disabled={actionLoading || (!!stagedHideItemId && !stagedHideCharId && (() => {
+                      const myCharsInZone = game!.zones[zone]?.characterIds
+                        .filter(id => game!.characters[id]?.playerId === uid && game!.characters[id]?.isAlive) ?? []
+                      return myCharsInZone.length > 1  // 캐릭터 여러 명인데 아직 선택 안 함
+                    })())}
                     className="text-sm bg-zinc-600 hover:bg-zinc-500 text-white font-bold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                   >
                     완료
@@ -1634,6 +1744,28 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       </div>
 
+      {/* 숨기/등장 공지 배너 */}
+      {game.lastHideRevealAnnounce && (() => {
+        const ann = game.lastHideRevealAnnounce
+        const isHide = ann.type === 'hide'
+        return (
+          <div className={`px-4 py-2 text-sm text-center font-bold border-b ${isHide ? 'bg-purple-950 border-purple-800 text-purple-200' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}>
+            {ann.entries.map((e, i) => {
+              const playerName = players[e.playerId]?.nickname ?? e.playerId
+              const charName = CHARACTER_CONFIGS[game.characters[e.charId]?.characterId]?.name ?? e.charId
+              const zoneName = ZONE_CONFIGS[e.zone]?.displayName ?? e.zone
+              return (
+                <span key={i} className="block">
+                  {isHide
+                    ? `🫥 ${playerName}님의 ${charName}가 ${zoneName}에서 흔적도 없이 사라졌습니다.`
+                    : `👁️ 사라졌던 ${playerName}님의 ${charName}가 ${zoneName}에서 모습을 드러냈습니다.`}
+                </span>
+              )
+            })}
+          </div>
+        )
+      })()}
+
       <div className="flex flex-1 overflow-hidden">
         {/* 존 보드 */}
         <div className="flex-1 p-4 overflow-y-auto">
@@ -1718,10 +1850,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     ) ?? false
                   })()
                   const isStaged = stagedWeapons.has(instanceId)
+                  const isHideStaged = stagedHideItemId === instanceId
                   const canUseWeapon = weaponItemIds.includes(itemId) && amInWeaponZone && !game.weaponUseStatus[uid ?? ''] && !isStaged
-                  const isUsable = canUseCctv || canUseThreat || canUseWeapon
+                  const canUseHide = itemId === 'hidden_card' && amInWeaponZone && !game.weaponUseStatus[uid ?? ''] && !stagedHideItemId
+                  const isUsable = canUseCctv || canUseThreat || canUseWeapon || canUseHide
 
                   const isConfirming = confirmingItems.has(instanceId)
+
+                  // staged 숨기: "숨기 예정" 표시 + 해제 버튼
+                  if (isHideStaged) {
+                    return (
+                      <div key={instanceId} className="flex items-center gap-1.5 bg-zinc-800 border border-purple-600 rounded-lg px-2.5 py-1.5">
+                        <span className="text-sm">🫥</span>
+                        <span className="text-xs text-purple-300 font-bold">숨기 ✓</span>
+                        <button onClick={() => { setStagedHideItemId(null); setStagedHideCharId(null) }}
+                          className="text-xs text-zinc-400 hover:text-red-400 px-1 transition-colors">
+                          해제
+                        </button>
+                      </div>
+                    )
+                  }
 
                   // staged 무기: "사용 예정" 표시 + 해제 버튼
                   if (isStaged) {

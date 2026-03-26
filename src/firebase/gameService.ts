@@ -190,37 +190,47 @@ export async function submitWeaponConfirm(
   roomCode: string,
   stagedInstanceIds: string[],  // 사용하기로 선택한 무기 instanceId 목록
   totalKill: number,            // 총 좀비 kill 수
-  currentItemIds: string[]
+  currentItemIds: string[],
+  hideCharId?: string | null    // 숨기 아이템으로 숨길 캐릭터 ID (없으면 null)
 ): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
 
-  // 사용한 아이템을 인벤토리에서 제거
-  const newItems = currentItemIds.filter(id => !stagedInstanceIds.includes(id))
+  // 사용한 아이템을 인벤토리에서 제거 (무기 + 숨기 아이템 포함)
+  const allUsed = [...stagedInstanceIds]
+  const newItems = currentItemIds.filter(id => !allUsed.includes(id))
 
   const gameSnap = await get(ref(db, `games/${roomCode}/game/playerItemCounts/${uid}`))
-  const prevCount: number = gameSnap.val() ?? stagedInstanceIds.length
-  const newCount = Math.max(0, prevCount - stagedInstanceIds.length)
+  const prevCount: number = gameSnap.val() ?? allUsed.length
+  const newCount = Math.max(0, prevCount - allUsed.length)
+
+  const gamePatch: Record<string, unknown> = {
+    [`weaponKillChoices/${uid}`]: totalKill,
+    [`playerItemCounts/${uid}`]: newCount,
+    [`weaponUseStatus/${uid}`]: true,
+  }
+  if (hideCharId) gamePatch[`hiddenCharacters/${hideCharId}`] = true
 
   await Promise.all([
     set(ref(db, `games/${roomCode}/private/${uid}/items`), newItems),
-    update(ref(db, `games/${roomCode}/game`), {
-      [`weaponKillChoices/${uid}`]: totalKill,
-      [`playerItemCounts/${uid}`]: newCount,
-      [`weaponUseStatus/${uid}`]: true,
-    }),
+    update(ref(db, `games/${roomCode}/game`), gamePatch),
   ])
 }
 
 // ── 플레이어 행동: weapon_use 패스 (무기 없이 확정) ─────────────
 
-export async function submitWeaponUsePass(roomCode: string): Promise<void> {
+export async function submitWeaponUsePass(
+  roomCode: string,
+  hideCharId?: string | null  // 숨기 아이템 선택 시
+): Promise<void> {
   const uid = getCurrentUid()
   if (!uid) return
-  await update(ref(db, `games/${roomCode}/game`), {
+  const patch: Record<string, unknown> = {
     [`weaponKillChoices/${uid}`]: 0,
     [`weaponUseStatus/${uid}`]: true,
-  })
+  }
+  if (hideCharId) patch[`hiddenCharacters/${hideCharId}`] = true
+  await update(ref(db, `games/${roomCode}/game`), patch)
 }
 
 // ── 플레이어 행동: 협박 아이템 사용 (투표 중) ────────────────

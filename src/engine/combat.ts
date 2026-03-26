@@ -12,7 +12,7 @@ export function calcDefense(
 ): number {
   const config = ZONE_CONFIGS[zone]
   const charDefenseSum = state.zones[zone].characterIds
-    .filter(id => state.characters[id]?.isAlive)
+    .filter(id => state.characters[id]?.isAlive && !state.hiddenCharacters?.[id])
     .reduce((sum, id) => {
       const char = state.characters[id]
       return sum + (CHARACTER_CONFIGS[char.characterId]?.defense ?? 1)
@@ -38,8 +38,9 @@ export function createVoteState(
   state: GameState,
   round: number = 0
 ): VoteState {
+  // 숨은 캐릭터는 방어·투표에서 제외
   const aliveInZone = state.zones[zone].characterIds
-    .filter(id => state.characters[id]?.isAlive)
+    .filter(id => state.characters[id]?.isAlive && !state.hiddenCharacters?.[id])
     .map(id => state.characters[id].playerId)
 
   const eligibleVoterIds = [...new Set(aliveInZone)]
@@ -118,7 +119,7 @@ export function getVoteWeight(
   return state.zones[zone].characterIds
     .filter(id => {
       const char = state.characters[id]
-      return char?.isAlive && char.playerId === playerId
+      return char?.isAlive && char.playerId === playerId && !state.hiddenCharacters?.[id]
     })
     .reduce((sum, id) => {
       const char = state.characters[id]
@@ -182,6 +183,6 @@ export function getAliveCharactersInZone(
 ): string[] {
   return state.zones[zone].characterIds.filter(id => {
     const char = state.characters[id]
-    return char?.isAlive && char.playerId === playerId
+    return char?.isAlive && char.playerId === playerId && !state.hiddenCharacters?.[id]
   })
 }

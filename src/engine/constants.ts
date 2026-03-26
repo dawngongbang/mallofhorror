@@ -124,9 +124,9 @@ export const CHARACTERS_BY_PLAYER_COUNT: Record<number, CharacterId[]> = {
 export const ITEM_CONFIGS: Record<ItemId, ItemConfig> = {
   hidden_card: {
     id: 'hidden_card',
-    name: '히든카드',
+    name: '숨기',
     count: 3,
-    description: '효과 미정',
+    description: '좀비 습격 전, 내 캐릭터 1명을 이 구역 처리가 끝날 때까지 숨깁니다. 숨은 캐릭터는 방어·투표에 참여하지 않습니다.',
   },
   cctv: {
     id: 'cctv',

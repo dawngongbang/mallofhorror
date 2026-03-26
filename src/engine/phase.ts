@@ -111,6 +111,8 @@ export function initRoundState(state: GameState): GameState {
     cctvViewers: [],
     weaponUseStatus: {},
     weaponKillChoices: {},
+    hiddenCharacters: {},
+    lastHideRevealAnnounce: null,
   }
 }
 

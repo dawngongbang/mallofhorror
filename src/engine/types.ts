@@ -63,7 +63,7 @@ export interface Player {
 // ── 아이템 ──────────────────────────────────────────────────
 
 export type ItemId =
-  | 'hidden_card'    // 히든카드 (x3)
+  | 'hidden_card'    // 숨기 (x3) — weapon_use 페이즈에 캐릭터 1명 숨김
   | 'cctv'          // 보안카메라 (x3) — 주사위 결과 확인
   | 'sprint'        // 스프린트 (x3)
   | 'threat'        // 협박 (x3) — 투표권 +1 (1회성)
@@ -261,6 +261,16 @@ export interface GameState {
 
   // weapon_use 페이즈: 플레이어별 무기 kill 수 (확정 시 기록, 호스트가 전원 확정 후 일괄 적용)
   weaponKillChoices: Record<string, number>
+
+  // weapon_use 페이즈: 숨기 아이템으로 숨은 캐릭터 (characterId → true, 해당 구역 처리 완료 시 초기화)
+  // 숨은 캐릭터는 방어·투표 참여·투표 대상에서 제외되지만 구역 인원수에는 포함
+  hiddenCharacters: Record<string, boolean>
+
+  // 숨기/등장 공지 (hide: 숨은 직후, reveal: 구역 처리 완료 후 등장)
+  lastHideRevealAnnounce: {
+    type: 'hide' | 'reveal'
+    entries: Array<{ playerId: string; charId: string; zone: ZoneName }>
+  } | null
 
   // 결과
   winners: string[]
