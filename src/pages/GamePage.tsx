@@ -2018,7 +2018,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           const isLoser = uid === pvs.loserPlayerId
           if (isLoser) {
             const myCharsInZone = Object.values(game!.characters).filter(
-              c => c.playerId === uid && c.isAlive && game!.zones[pvs.zone].characterIds.includes(c.id)
+              c => c.playerId === uid && c.isAlive
+                && game!.zones[pvs.zone].characterIds.includes(c.id)
+                && !game!.hiddenCharacters?.[c.id]
             )
             return (
               <div>
@@ -2060,14 +2062,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         const voteTypeLabel = vote.type === 'zombie_attack' ? '좀비 공격' :
           vote.type === 'truck_search' ? '트럭 수색' : '보안관 선출'
 
-        const candidates = vote.candidates.map(id => ({
+        const candidates = (vote.candidates ?? []).map(id => ({
           id,
           nickname: players[id]?.nickname ?? '?',
           color: players[id]?.color ?? 'red',
         }))
 
-        const confirmedCount = vote.eligibleVoters.filter(id => vote.status[id]).length
-        const canVote = vote.eligibleVoters.includes(uid ?? '')
+        const eligibleVoters = vote.eligibleVoters ?? []
+        const confirmedCount = eligibleVoters.filter(id => vote.status[id]).length
+        const canVote = eligibleVoters.includes(uid ?? '')
 
         // ── 투표 결과 공지 화면 ──────────────────────────────
         const announce = game!.lastVoteAnnounce
@@ -2084,7 +2087,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
               {/* 누가 누굴 뽑았는지 */}
               <div className="space-y-1 mb-3">
-                {vote.eligibleVoters.map(voterId => {
+                {eligibleVoters.map(voterId => {
                   const targetId = announce.votes[voterId]
                   const voterName = players[voterId]?.nickname ?? '?'
                   const targetName = targetId ? (players[targetId]?.nickname ?? '?') : '기권'
@@ -2188,7 +2191,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               <p className="text-zinc-500 text-sm">이번 투표에 참여하지 않습니다.</p>
             )}
 
-            <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {vote.eligibleVoters.length}명 확정</p>
+            <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {eligibleVoters.length}명 확정</p>
           </div>
         )
       }
