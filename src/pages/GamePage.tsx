@@ -254,14 +254,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         else if (game.phase === 'weapon_use') {
           const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
           const zoneState = game.zones[zone]
+          // 숨긴 캐릭터도 포함 (alive 기준) — 단, 해당 플레이어가 weaponUseStatus를 명시적으로 세팅해야 확정으로 인정
           const inZonePlayers = [...new Set(
             zoneState.characterIds
               .map(id => game.characters[id])
               .filter(c => c?.isAlive)
               .map(c => c!.playerId)
           )]
+          // weaponUseStatus에 최소 1명 이상 기록돼야 조기종료 판단 (Firebase 중간 상태 방어)
+          const hasAnyStatus = Object.keys(game.weaponUseStatus ?? {}).length > 0
           const allConfirmed = inZonePlayers.length === 0 ||
-            inZonePlayers.every(pid => game.weaponUseStatus[pid])
+            (hasAnyStatus && inZonePlayers.every(pid => game.weaponUseStatus[pid]))
           if (allConfirmed) {
             const nextZoneIndex = game.currentEventZoneIndex + 1
             const voteMs = (meta?.settings.votingTime ?? 60) * 1000
@@ -1773,50 +1776,52 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       </div>
 
-      {/* 숨기/등장 공지 배너 */}
-      {game.lastHideRevealAnnounce && (() => {
-        const ann = game.lastHideRevealAnnounce
-        const isHide = ann.type === 'hide'
-        return (
-          <div className={`px-4 py-2 text-sm text-center font-bold border-b ${isHide ? 'bg-purple-950 border-purple-800 text-purple-200' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}>
-            {ann.entries.map((e, i) => {
-              const playerName = players[e.playerId]?.nickname ?? e.playerId
-              const charName = CHARACTER_CONFIGS[game.characters[e.charId]?.characterId]?.name ?? e.charId
-              const zoneName = ZONE_CONFIGS[e.zone]?.displayName ?? e.zone
-              return (
-                <span key={i} className="block">
-                  {isHide
-                    ? `🫥 ${playerName}님의 ${charName}가 ${zoneName}에서 흔적도 없이 사라졌습니다.`
-                    : `👁️ 사라졌던 ${playerName}님의 ${charName}가 ${zoneName}에서 모습을 드러냈습니다.`}
+      {/* 숨기/등장 공지 + weapon_use 결과 — fixed 오버레이 (레이아웃 영향 없음) */}
+      {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce) && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none" style={{maxWidth: '90vw'}}>
+          {game.lastHideRevealAnnounce && (() => {
+            const ann = game.lastHideRevealAnnounce!
+            const isHide = ann.type === 'hide'
+            return (
+              <div className={`px-4 py-2 text-sm text-center font-bold rounded-xl shadow-lg ${isHide ? 'bg-purple-950/95 text-purple-200' : 'bg-zinc-800/95 text-zinc-200'}`}>
+                {ann.entries.map((e, i) => {
+                  const playerName = players[e.playerId]?.nickname ?? e.playerId
+                  const charName = CHARACTER_CONFIGS[game.characters[e.charId]?.characterId]?.name ?? e.charId
+                  const zoneName = ZONE_CONFIGS[e.zone]?.displayName ?? e.zone
+                  return (
+                    <span key={i} className="block">
+                      {isHide
+                        ? `🫥 ${playerName}님의 ${charName}가 ${zoneName}에서 흔적도 없이 사라졌습니다.`
+                        : `👁️ 사라졌던 ${playerName}님의 ${charName}가 ${zoneName}에서 모습을 드러냈습니다.`}
+                    </span>
+                  )
+                })}
+              </div>
+            )
+          })()}
+          {game.lastWeaponUseAnnounce && (() => {
+            const ann = game.lastWeaponUseAnnounce!
+            const zoneName = ZONE_CONFIGS[ann.zone]?.displayName ?? ann.zone
+            const killLines = Object.entries(ann.killsByPlayer).map(([pid, k]) => {
+              const name = players[pid]?.nickname ?? pid
+              return `${name}님이 ${k}마리 처치`
+            })
+            return (
+              <div className="px-4 py-2 text-sm text-center font-bold rounded-xl shadow-lg bg-orange-950/95 text-orange-200">
+                <span className="block">🔫 {zoneName} — 아이템 사용 결과</span>
+                {killLines.length > 0
+                  ? killLines.map((line, i) => <span key={i} className="block">{line}</span>)
+                  : <span className="block text-orange-400">사용된 무기 없음</span>}
+                <span className="block mt-0.5">
+                  {ann.totalKill > 0
+                    ? `총 ${ann.totalKill}마리 처치 → 남은 좀비 ${ann.remainingZombies}마리`
+                    : `남은 좀비 ${ann.remainingZombies}마리`}
                 </span>
-              )
-            })}
-          </div>
-        )
-      })()}
-
-      {/* weapon_use 결과 공지 배너 */}
-      {game.lastWeaponUseAnnounce && (() => {
-        const ann = game.lastWeaponUseAnnounce
-        const zoneName = ZONE_CONFIGS[ann.zone]?.displayName ?? ann.zone
-        const killLines = Object.entries(ann.killsByPlayer).map(([pid, k]) => {
-          const name = players[pid]?.nickname ?? pid
-          return `${name}님이 ${k}마리 처치`
-        })
-        return (
-          <div className="px-4 py-2 text-sm text-center font-bold border-b bg-orange-950 border-orange-800 text-orange-200">
-            <span className="block">🔫 {zoneName} — 아이템 사용 결과</span>
-            {killLines.length > 0
-              ? killLines.map((line, i) => <span key={i} className="block">{line}</span>)
-              : <span className="block text-orange-400">사용된 무기 없음</span>}
-            <span className="block mt-0.5">
-              {ann.totalKill > 0
-                ? `총 ${ann.totalKill}마리 처치 → 남은 좀비 ${ann.remainingZombies}마리`
-                : `남은 좀비 ${ann.remainingZombies}마리`}
-            </span>
-          </div>
-        )
-      })()}
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* 존 보드 */}
