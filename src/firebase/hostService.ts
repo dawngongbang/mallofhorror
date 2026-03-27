@@ -295,6 +295,10 @@ export async function hostResolveItemSearch(
     phase: 'event',
   }
 
+  const itemSearchAnnounce = {
+    winnerId,
+    ...(givenToPlayerId ? { givenToPlayerId } : {}),
+  }
   await patchGameState(roomCode, {
     itemDeck: newDeck,
     itemSearchPreview: null,
@@ -303,6 +307,7 @@ export async function hostResolveItemSearch(
     playerItemCounts: newCounts,
     currentEventZoneIndex: nextZoneIndex,
     phase: 'event',
+    lastItemSearchAnnounce: itemSearchAnnounce,
   })
 
   return next

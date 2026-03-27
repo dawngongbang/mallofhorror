@@ -138,7 +138,7 @@ export const ITEM_CONFIGS: Record<ItemId, ItemConfig> = {
     id: 'sprint',
     name: '스프린트',
     count: 3,
-    description: '효과 미정',
+    description: '좀비 습격 전, 내 캐릭터 1명을 다른 구역으로 이동시킨다.',
   },
   threat: {
     id: 'threat',

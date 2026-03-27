@@ -201,6 +201,7 @@ function normalizeGame(g: GameState): GameState {
     lastZombiePlayerAnnounce: g.lastZombiePlayerAnnounce
                               ? { entries: Array.isArray(g.lastZombiePlayerAnnounce.entries) ? g.lastZombiePlayerAnnounce.entries : Object.values(g.lastZombiePlayerAnnounce.entries ?? {}) }
                               : null,
+    lastItemSearchAnnounce:   g.lastItemSearchAnnounce ?? null,
   }
 }
 
@@ -820,6 +821,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [!!game?.lastSprintAnnounce, isHost, roomCode])
+
+  // ── 트럭 수색 완료 공지 → 5초 후 자동 해제 ────────────────────
+  useEffect(() => {
+    if (!isHost || !game?.lastItemSearchAnnounce) return
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g?.lastItemSearchAnnounce) return
+      await patchGameState(roomCode, { lastItemSearchAnnounce: null })
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [!!game?.lastItemSearchAnnounce, isHost, roomCode])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -2252,8 +2264,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       </div>
 
-      {/* 숨기/등장 공지 + weapon_use 결과 + 좀비 플레이어 공지 — fixed 오버레이 */}
-      {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce || game.lastZombiePlayerAnnounce) && (
+      {/* 숨기/등장 공지 + weapon_use 결과 + 좀비 플레이어 공지 + 트럭 수색 완료 — fixed 오버레이 */}
+      {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce || game.lastZombiePlayerAnnounce || game.lastItemSearchAnnounce) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none" style={{maxWidth: '90vw'}}>
           {game.lastHideRevealAnnounce && (() => {
             const ann = game.lastHideRevealAnnounce!
@@ -2305,6 +2317,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               })}
             </div>
           )}
+          {game.lastItemSearchAnnounce && (() => {
+            const ann = game.lastItemSearchAnnounce!
+            const winnerName = players[ann.winnerId]?.nickname ?? ann.winnerId
+            const givenToName = ann.givenToPlayerId ? (players[ann.givenToPlayerId]?.nickname ?? ann.givenToPlayerId) : null
+            return (
+              <div className="px-4 py-2 text-sm text-center font-bold rounded-xl shadow-lg bg-zinc-800/95 text-zinc-200">
+                <span className="block">🚚 {winnerName}님이 트럭 수색을 마쳤습니다.</span>
+                {givenToName && (
+                  <span className="block text-blue-300">{winnerName}님이 {givenToName}님에게 아이템을 건냈습니다.</span>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )}
 

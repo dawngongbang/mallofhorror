@@ -53,30 +53,27 @@ function ZoneTab() {
           <tr className="text-zinc-500 border-b border-zinc-800">
             <th className="text-left py-1.5">구역</th>
             <th className="text-center py-1.5">수용</th>
-            <th className="text-center py-1.5">방어한도</th>
             <th className="text-left py-1.5">특수</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-800">
           {[
-            { name: '🚽 화장실', cap: '3', def: '3', special: '' },
-            { name: '👗 옷가게', cap: '4', def: '4', special: '3~4인 시작 시 폐쇄' },
-            { name: '🧸 장난감가게', cap: '4', def: '4', special: '' },
-            { name: '🚗 주차장', cap: '∞', def: '0', special: '좀비 1마리 = 항상 습격. 트럭 수색' },
-            { name: '🔒 보안실', cap: '3', def: '3', special: '보안관 투표. 정식보안관 유지 조건' },
-            { name: '🛒 슈퍼마켓', cap: '6', def: '4', special: '' },
+            { name: '🚽 화장실', cap: '3', special: '' },
+            { name: '👗 옷가게', cap: '4', special: '3~4인 시작 시 폐쇄' },
+            { name: '🧸 장난감가게', cap: '4', special: '' },
+            { name: '🚗 주차장', cap: '∞', special: '좀비 1마리 = 항상 습격. 트럭 수색' },
+            { name: '🔒 보안실', cap: '3', special: '보안관 투표. 정식보안관 유지 조건' },
+            { name: '🛒 슈퍼마켓', cap: '6', special: '방어한도 4 (초과 인원은 방어에 기여 없음)' },
           ].map(r => (
             <tr key={r.name} className="text-zinc-300">
               <td className="py-1.5 font-medium">{r.name}</td>
               <td className="text-center py-1.5 text-zinc-400">{r.cap}</td>
-              <td className="text-center py-1.5 text-zinc-400">{r.def}</td>
               <td className="py-1.5 text-zinc-500 text-xs">{r.special}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="bg-zinc-800 rounded-xl p-3 text-xs text-zinc-400 space-y-1">
-        <p>• 방어한도: 캐릭터가 아무리 많아도 이 수치를 초과한 방어는 불가</p>
         <p>• 목적지가 가득 찼으면 주차장으로 튕겨남</p>
         <p>• 좀비 8마리 이상 + 사람 없음 → 구역 폐쇄 (이후 이동 불가)</p>
       </div>
@@ -131,14 +128,14 @@ function ItemTab() {
       <p className="text-zinc-500 text-xs">게임 시작 시 21장 중 인당 3장 랜덤 지급.</p>
       <div className="space-y-2">
         {[
-          { icon: '📷', name: '보안카메라', count: '×3', effect: '아무때나 사용 가능. 이번 라운드 주사위 결과를 정식보안관과 동일하게 확인.', status: '' },
-          { icon: '😤', name: '협박', count: '×3', effect: '투표 중 사용. 이번 투표에서 자신의 투표권 +1. 재투표 시 효과 소멸.', status: '' },
-          { icon: '🔧', name: '하드웨어', count: '×3', effect: '습격 판정 시 내 캐릭터의 방어력 +1.', status: '미구현' },
-          { icon: '👟', name: '스프린트', count: '×3', effect: '이동지 변경 또는 투표 회피.', status: '미구현' },
-          { icon: '🃏', name: '히든카드', count: '×3', effect: '이동 취소 또는 투표 회피.', status: '미구현' },
-          { icon: '🪓', name: '도끼', count: '×1', effect: '좀비 1마리 제거.', status: '미구현' },
-          { icon: '🔫', name: '권총 / 야구배트', count: '×1', effect: '좀비 1마리 제거.', status: '미구현' },
-          { icon: '💣', name: '샷건 / 수류탄 / 전기톱', count: '×1', effect: '좀비 2마리 제거.', status: '미구현' },
+          { icon: '📷', name: '보안카메라', count: '×3', effect: '아무때나 사용 가능. 이번 라운드 주사위 결과를 정식보안관과 동일하게 확인.' },
+          { icon: '😤', name: '협박', count: '×3', effect: '투표 중 사용. 이번 투표에서 자신의 투표권 +1. 재투표 시 효과 소멸.' },
+          { icon: '🫥', name: '숨기', count: '×3', effect: '습격 전, 내 캐릭터 1명을 이 구역 처리가 끝날 때까지 숨긴다. 숨은 캐릭터는 방어·투표에 참여하지 않는다.' },
+          { icon: '🔧', name: '하드웨어', count: '×3', effect: '습격 판정 시 사용. 방어력 +1.' },
+          { icon: '👟', name: '스프린트', count: '×3', effect: '습격 전, 내 캐릭터 1명을 다른 구역으로 이동시킨다.' },
+          { icon: '🪓', name: '도끼', count: '×1', effect: '좀비 1마리 제거. 습격 직전 사용.' },
+          { icon: '🔫', name: '권총 / 야구배트', count: '×1', effect: '좀비 1마리 제거. 습격 직전 사용.' },
+          { icon: '💣', name: '샷건 / 수류탄 / 전기톱', count: '×1', effect: '좀비 2마리 제거. 습격 직전 사용.' },
         ].map(item => (
           <div key={item.name} className="flex gap-2 bg-zinc-800 rounded-xl p-2.5">
             <span className="text-lg shrink-0">{item.icon}</span>
@@ -146,7 +143,6 @@ function ItemTab() {
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className="text-white font-medium text-xs">{item.name}</span>
                 <span className="text-zinc-600 text-xs">{item.count}</span>
-                {item.status && <span className="text-xs text-zinc-600 bg-zinc-700 px-1.5 rounded">{item.status}</span>}
               </div>
               <p className="text-zinc-400 text-xs">{item.effect}</p>
             </div>

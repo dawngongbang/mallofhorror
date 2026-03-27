@@ -310,6 +310,12 @@ export interface GameState {
     remainingZombies: number
   } | null
 
+  // 트럭 수색 완료 공지
+  lastItemSearchAnnounce: {
+    winnerId: string
+    givenToPlayerId?: string
+  } | null
+
   // 결과
   winners: string[]
   finalScores: Record<string, number>

@@ -101,6 +101,7 @@ export function createInitialGameState(
     zombiePlayerZoneChoices: {},
     lastZombiePlayerAnnounce: null,
     lastWeaponUseAnnounce: null,
+    lastItemSearchAnnounce: null,
     lastBonusZombieResult: null,
 
     winners: [],
