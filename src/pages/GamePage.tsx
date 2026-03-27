@@ -48,6 +48,13 @@ function getPlayerSpawnPos(playerIndex: number, totalPlayers: number): { x: numb
   return { x: 97, y }
 }
 
+// 손패 카드 위치 (맵 컨테이너 기준 %)
+function getHandCardPos(cardIndex: number, totalCards: number): { x: number; y: number } {
+  const spacing = Math.min(22, 55 / Math.max(1, totalCards - 1))
+  const x = 50 + (cardIndex - (totalCards - 1) / 2) * spacing
+  return { x, y: 88 }
+}
+
 const COLOR_BG_TOKEN: Record<string, string> = {
   red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-green-500',
   yellow: 'bg-yellow-400', purple: 'bg-purple-500', orange: 'bg-orange-500',
@@ -232,6 +239,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [truckKept, setTruckKept] = useState<string | null>(null)
   const [truckGiven, setTruckGiven] = useState<string | null>(null)
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
+  const pendingSetupFromPos = useRef<{ charId: string; pos: { x: number; y: number } } | null>(null)
   const processingRef = useRef(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   // 이동 애니메이션
@@ -276,10 +284,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         const label = CHAR_ICON[char.characterId] ?? charConfig?.name?.charAt(0) ?? '?'
         const playerIndex = game.playerOrder.indexOf(char.playerId)
 
-        // 이전 존이 맵에 있는 존이면 거기서 출발, 없으면(초기 배치 등) 플레이어 스폰 위치
-        const fromPos = prevZoneStr && ZONE_MAP_POSITIONS[prevZoneStr as ZoneName]
-          ? getZoneCenter(prevZoneStr as ZoneName)
-          : getPlayerSpawnPos(playerIndex, game.playerOrder.length)
+        // 초기 배치 손패 카드에서 출발하는 경우 저장된 위치 사용
+        let fromPos: { x: number; y: number }
+        if (pendingSetupFromPos.current?.charId === charId) {
+          fromPos = pendingSetupFromPos.current.pos
+          pendingSetupFromPos.current = null
+        } else if (prevZoneStr && ZONE_MAP_POSITIONS[prevZoneStr as ZoneName]) {
+          fromPos = getZoneCenter(prevZoneStr as ZoneName)
+        } else {
+          fromPos = getPlayerSpawnPos(playerIndex, game.playerOrder.length)
+        }
 
         // 스프린트 바운스: 주차장으로 갔는데 이전 구역도 주차장이 아닌 경우,
         // pendingSprintChoices에서 의도한 목적지 찾기
@@ -978,6 +992,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   async function handlePlaceCharacter(charInstanceId: string, zone: ZoneName) {
     if (!game || !charInstanceId || actionLoading) return
     setActionLoading(true)
+    // 손패 카드 위치를 애니메이션 출발점으로 저장
+    const cardIndex = myUnplacedChars.findIndex(c => c.id === charInstanceId)
+    if (cardIndex >= 0) {
+      pendingSetupFromPos.current = { charId: charInstanceId, pos: getHandCardPos(cardIndex, myUnplacedChars.length) }
+    }
     let next = placeCharacter(game, charInstanceId, zone)
     if (next.setupPlacementOrder.length === 0) next = startFirstRound(next)
     await patchGameState(roomCode, {
@@ -2358,6 +2377,43 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 />
               )
             })}
+
+            {/* ── 손패 카드 (setup_place, 내 턴, 주사위 굴린 후) ── */}
+            {game.phase === 'setup_place' && isMyTurnToPlace && !!game.setupDiceRoll && myUnplacedChars.length > 0 && (
+              <>
+                {myUnplacedChars.map((char, i) => {
+                  const cfg = CHARACTER_CONFIGS[char.characterId]
+                  const pos = getHandCardPos(i, myUnplacedChars.length)
+                  const isSelected = selectedSetupCharId === char.id
+                  const isPlacing = transitCharIds.has(char.id)
+                  return (
+                    <div
+                      key={char.id}
+                      onClick={() => { if (!isPlacing && !actionLoading) setSelectedSetupCharId(isSelected ? null : char.id) }}
+                      style={{
+                        position: 'absolute',
+                        left: `${pos.x}%`,
+                        top: `${pos.y}%`,
+                        transform: `translate(-50%, -100%)${isSelected ? ' translateY(-14px) scale(1.12)' : ''}`,
+                        transition: 'transform 0.18s ease, opacity 0.15s ease',
+                        opacity: isPlacing ? 0 : 1,
+                        zIndex: 40,
+                      }}
+                      className={`cursor-pointer rounded-2xl shadow-2xl flex flex-col items-center justify-center w-12 h-14 select-none
+                        ${isSelected
+                          ? 'bg-yellow-600 ring-2 ring-yellow-300'
+                          : 'bg-zinc-800/90 border border-zinc-500 hover:border-zinc-300 hover:bg-zinc-700/90'
+                        }
+                        ${actionLoading ? 'pointer-events-none' : ''}
+                      `}
+                    >
+                      <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
+                      <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
           {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
           {game.phase === 'setup_place' && (
