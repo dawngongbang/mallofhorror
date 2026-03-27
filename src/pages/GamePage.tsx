@@ -129,7 +129,7 @@ const COLOR_BG: Record<string, string> = {
 const PHASE_LABEL: Record<string, string> = {
   setup_place: '초기 배치', roll_dice: '주사위', dice_reveal: '주사위 공개',
   character_select: '캐릭터 선언', destination_seal: '목적지 선택',
-  destination_reveal: '공개', move_execute: '이동',
+  destination_reveal: '공개', move_execute: '이동', zombie_spawn: '좀비 배치',
   event: '이벤트', zone_announce: '구역 공지', weapon_use: '아이템 사용', voting: '투표',
   check_win: '승리 체크', finished: '종료',
 }
@@ -209,6 +209,8 @@ function normalizeGame(g: GameState): GameState {
                               ? { entries: Array.isArray(g.lastZombiePlayerAnnounce.entries) ? g.lastZombiePlayerAnnounce.entries : Object.values(g.lastZombiePlayerAnnounce.entries ?? {}) }
                               : null,
     lastItemSearchAnnounce:   g.lastItemSearchAnnounce ?? null,
+    zombieSpawnBatches:       Array.isArray(g.zombieSpawnBatches) ? g.zombieSpawnBatches : null,
+    zombieSpawnStep:          g.zombieSpawnStep ?? 0,
   }
 }
 
@@ -873,6 +875,49 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 2000)
     return () => clearTimeout(timer)
   }, [game?.phase, game?.currentMoveStep, isHost, roomCode])
+
+  // ── zombie_spawn: 배치 단계 순차 처리 ────────────────────────
+  useEffect(() => {
+    if (!isHost || !game || game.phase !== 'zombie_spawn') return
+    const batches = game.zombieSpawnBatches ?? []
+    const step = game.zombieSpawnStep
+    const nextStep = step + 1
+
+    const timer = setTimeout(async () => {
+      const g = gameRef.current
+      if (!g || g.phase !== 'zombie_spawn' || g.zombieSpawnStep !== step) return
+
+      if (nextStep >= batches.length) {
+        // 모든 배치 완료 → event로 전환
+        await patchGameState(roomCode, {
+          phase: 'event',
+          currentEventZoneIndex: 0,
+          zombiePlayerZoneChoices: {},
+          zombieSpawnBatches: null,
+          zombieSpawnStep: 0,
+        })
+        return
+      }
+
+      // 다음 배치 적용
+      const batch = batches[nextStep]
+      const zones = { ...g.zones }
+      if (batch.type === 'crowded' || batch.type === 'belle') {
+        zones[batch.zone] = { ...zones[batch.zone], zombies: zones[batch.zone].zombies + 1 }
+      } else if (batch.type === 'zombie_player') {
+        zones[batch.zone] = { ...zones[batch.zone], zombies: zones[batch.zone].zombies + 1 }
+      }
+
+      await patchGameState(roomCode, {
+        zones,
+        zombieSpawnStep: nextStep,
+        ...(batch.type === 'zombie_player'
+          ? { lastZombiePlayerAnnounce: { entries: [{ playerId: batch.playerId, zone: batch.zone }] } }
+          : {}),
+      })
+    }, 2500)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.zombieSpawnStep, isHost, roomCode])
 
   // zone_announce deps용: 현재 구역 좀비 수 (좀비 습격 후 0으로 바뀔 때 effect 재실행 필요)
   const zoneAnnounceZone = game?.phase === 'zone_announce' ? EVENT_ZONE_ORDER[game.currentEventZoneIndex] : null
@@ -1688,6 +1733,57 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             {moves.length === 0 && (
               <p className="text-zinc-500 text-xs">이동할 캐릭터가 없습니다.</p>
             )}
+          </div>
+        )
+      }
+
+      // ── 좀비 순차 배치 공지 ──────────────────────────────────
+      case 'zombie_spawn': {
+        const batches = game!.zombieSpawnBatches ?? []
+        const step = game!.zombieSpawnStep
+        const currentBatch = batches[step] ?? null
+        return (
+          <div>
+            <p className="text-zinc-500 text-xs mb-2">🧟 좀비 배치 중... ({step + 1}/{batches.length})</p>
+            {currentBatch && (() => {
+              if (currentBatch.type === 'dice') {
+                const lines = Object.entries(currentBatch.zones).map(([zone, cnt]) =>
+                  `${ZONE_CONFIGS[zone as import('../engine/types').ZoneName]?.displayName} +${cnt}마리`
+                )
+                return (
+                  <div className="bg-zinc-800 rounded-lg p-2">
+                    <p className="text-white text-sm font-bold mb-1">🎲 주사위 결과</p>
+                    {lines.map((l, i) => <p key={i} className="text-zinc-300 text-xs">{l}</p>)}
+                  </div>
+                )
+              }
+              if (currentBatch.type === 'crowded') {
+                return (
+                  <div className="bg-zinc-800 rounded-lg p-2">
+                    <p className="text-white text-sm font-bold">👥 사람이 제일 많은 구역</p>
+                    <p className="text-red-300 text-xs mt-0.5">{ZONE_CONFIGS[currentBatch.zone].displayName}에 좀비가 나타났습니다!</p>
+                  </div>
+                )
+              }
+              if (currentBatch.type === 'belle') {
+                return (
+                  <div className="bg-zinc-800 rounded-lg p-2">
+                    <p className="text-white text-sm font-bold">💄 미녀가 제일 많은 구역</p>
+                    <p className="text-red-300 text-xs mt-0.5">{ZONE_CONFIGS[currentBatch.zone].displayName}에 좀비가 나타났습니다!</p>
+                  </div>
+                )
+              }
+              if (currentBatch.type === 'zombie_player') {
+                const pName = players[currentBatch.playerId]?.nickname ?? currentBatch.playerId
+                return (
+                  <div className="bg-zinc-800 rounded-lg p-2">
+                    <p className="text-red-400 text-sm font-bold">🧟 좀비가 된 {pName}님</p>
+                    <p className="text-zinc-300 text-xs mt-0.5">{ZONE_CONFIGS[currentBatch.zone].displayName}에 나타났습니다!</p>
+                  </div>
+                )
+              }
+              return null
+            })()}
           </div>
         )
       }

@@ -5,7 +5,7 @@ import { updateRoomStatus } from './roomService'
 import type { GameState, GameSettings, Player } from '../engine/types'
 import { createInitialGameState } from '../engine/setup'
 import { createItemDeck, shuffle, dealItems } from '../engine/items'
-import { rollZombieDice, applyZombiePlacement, applyBonusZombies } from '../engine/dice'
+import { rollZombieDice, applyZombiePlacement, calcBonusZombies } from '../engine/dice'
 import { planMovesInOrder, applyMoveStep } from '../engine/movement'
 import { calculateVoteResult } from '../engine/combat'
 import { applyZombieAttackResult, applyItemSearchResult, applySheriffVoteResult } from '../engine/event'
@@ -114,33 +114,49 @@ export async function hostApplyNextMoveStep(
 
     return next
   } else {
-    // 모든 이동 완료 → 좀비 배치 후 event
+    // 모든 이동 완료 → zombie_spawn 페이즈로 순차 배치 시작
+    type ZoneName = import('../engine/types').ZoneName
+    type SpawnBatch = NonNullable<import('../engine/types').GameState['zombieSpawnBatches']>[number]
+
+    const batches: SpawnBatch[] = []
+
+    // 배치 0: 주사위 4마리
+    if (state.lastDiceRoll) {
+      batches.push({ type: 'dice', zones: state.lastDiceRoll.zombiesByZone as Partial<Record<ZoneName, number>> })
+    }
+
+    // 배치 1: 인원 최다 구역 +1 / 배치 2: 미녀 최다 구역 +1 (순서 고정)
+    const { mostCrowdedZone, belleZone } = calcBonusZombies(state)
+    if (mostCrowdedZone) batches.push({ type: 'crowded', zone: mostCrowdedZone })
+    if (belleZone) batches.push({ type: 'belle', zone: belleZone })
+
+    // 배치 3+: 좀비 플레이어
+    const zombieChoices = state.zombiePlayerZoneChoices ?? {}
+    for (const [playerId, zone] of Object.entries(zombieChoices) as [string, ZoneName][]) {
+      if (state.zones[zone]) batches.push({ type: 'zombie_player', zone, playerId })
+    }
+
+    // 배치 0 즉시 적용 (주사위 좀비)
     let next = state
     if (state.lastDiceRoll) {
       next = applyZombiePlacement(next, state.lastDiceRoll)
-      next = applyBonusZombies(next)
     }
 
-    // 좀비 플레이어 추가 좀비 배치
-    const zombieChoices = state.zombiePlayerZoneChoices ?? {}
-    const zombieEntries: Array<{ playerId: string; zone: import('../engine/types').ZoneName }> = []
-    for (const [playerId, zone] of Object.entries(zombieChoices) as [string, import('../engine/types').ZoneName][]) {
-      if (next.zones[zone]) {
-        next = { ...next, zones: { ...next.zones, [zone]: { ...next.zones[zone], zombies: next.zones[zone].zombies + 1 } } }
-        zombieEntries.push({ playerId, zone })
-      }
+    const withPhase = {
+      ...next,
+      phase: 'zombie_spawn' as const,
+      zombieSpawnBatches: batches,
+      zombieSpawnStep: 0,
+      lastBonusZombieResult: { belleZone, mostCrowdedZone },
     }
-    const zombieAnnounce = zombieEntries.length > 0 ? { entries: zombieEntries } : null
-
-    const withPhase = { ...next, phase: 'event' as const, currentEventZoneIndex: 0, zombiePlayerZoneChoices: {} }
 
     await patchGameState(roomCode, {
       zones: withPhase.zones,
       characters: withPhase.characters,
-      phase: 'event',
-      currentEventZoneIndex: 0,
-      zombiePlayerZoneChoices: {},
-      ...(zombieAnnounce ? { lastZombiePlayerAnnounce: zombieAnnounce } : {}),
+      phase: 'zombie_spawn',
+      zombieSpawnBatches: batches,
+      zombieSpawnStep: 0,
+      lastBonusZombieResult: { belleZone, mostCrowdedZone },
     })
 
     return withPhase

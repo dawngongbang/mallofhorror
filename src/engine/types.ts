@@ -163,6 +163,7 @@ export type GamePhase =
   | 'destination_seal'    // 이동②: 목적지 봉인
   | 'destination_reveal'  // 이동③: 동시 공개
   | 'move_execute'        // 이동④: 순서대로 이동
+  | 'zombie_spawn'        // 좀비 순차 배치 공지
   | 'event'               // 이벤트 진입 (다음 구역으로 이동)
   | 'zone_announce'       // 구역 상황 공지 (2초 대기 후 처리)
   | 'weapon_use'          // 습격 직전 무기 사용 기회 (타이머 후 좀비 재계산)
@@ -309,6 +310,15 @@ export interface GameState {
     totalKill: number
     remainingZombies: number
   } | null
+
+  // 좀비 순차 배치 공지
+  zombieSpawnBatches: (
+    | { type: 'dice'; zones: Partial<Record<ZoneName, number>> }
+    | { type: 'crowded'; zone: ZoneName }
+    | { type: 'belle'; zone: ZoneName }
+    | { type: 'zombie_player'; zone: ZoneName; playerId: string }
+  )[] | null
+  zombieSpawnStep: number   // 현재까지 공지 완료된 배치 단계
 
   // 트럭 수색 완료 공지
   lastItemSearchAnnounce: {
