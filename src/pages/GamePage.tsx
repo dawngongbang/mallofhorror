@@ -254,6 +254,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [transitCharIds, setTransitCharIds] = useState<Set<string>>(new Set())
   const prevCharZones = useRef<Record<string, string>>({})
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
+  const [handTab, setHandTab] = useState<'chars' | 'items'>('chars')
   const [showRules, setShowRules] = useState(false)
   const [hoveredCharId, setHoveredCharId] = useState<string | null>(null)
   const [hoveredZone, setHoveredZone] = useState<ZoneName | null>(null)
@@ -279,7 +280,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     for (const [charId, char] of Object.entries(chars)) {
       const prevZoneStr = prev[charId]
       const toZone = char.zone as ZoneName
-      if (initialized && char.isAlive && prevZoneStr !== char.zone) {
+      // 미배치 캐릭터(parking zone이지만 zones.parking에 없음)는 '__hand__'로 취급
+      // → 주차장 배치 시 '__hand__' → 'parking'으로 감지되어 애니메이션 실행
+      const isUnplaced = char.zone === 'parking' && !game.zones.parking.characterIds.includes(charId)
+      const effectiveZone = isUnplaced ? '__hand__' : char.zone
+      if (initialized && char.isAlive && prevZoneStr !== effectiveZone) {
         const charConfig = CHARACTER_CONFIGS[char.characterId]
         const label = CHAR_ICON[char.characterId] ?? charConfig?.name?.charAt(0) ?? '?'
         const playerIndex = game.playerOrder.indexOf(char.playerId)
@@ -316,7 +321,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         })
         newTransitIds.push(charId)
       }
-      prev[charId] = char.zone
+      prev[charId] = effectiveZone
     }
 
     if (newTokens.length > 0) {
@@ -1359,51 +1364,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           )
         }
 
-        // 주사위 결과 공개 후 — 캐릭터 & 구역 선택
+        // 주사위 결과 공개 후 — 손패 카드로 선택
         const d = game!.setupDiceRoll as [number, number]
         return (
-          <div>
-            <p className="text-xs text-zinc-500 mb-2">
-              🎲 주사위: {d[0]}, {d[1]} →{' '}
+          <div className="text-center">
+            <p className="text-xs text-zinc-500">
+              🎲 {d[0]}, {d[1]} →{' '}
               <span className="text-yellow-400">{setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}</span>
             </p>
-
-            {/* 캐릭터 선택 */}
-            <p className="text-white text-sm font-bold mb-2">배치할 캐릭터 선택</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {myUnplacedChars.map(char => {
-                const cfg = CHARACTER_CONFIGS[char.characterId]
-                const isSelected = selectedSetupCharId === char.id
-                return (
-                  <button key={char.id}
-                    onClick={() => setSelectedSetupCharId(isSelected ? null : char.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-yellow-500 text-black'
-                        : 'bg-zinc-700 hover:bg-zinc-600 text-white'
-                    }`}>
-                    {cfg?.name}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* 구역 선택 (캐릭터 선택 후 활성화) */}
-            {selectedSetupCharId && (
-              <>
-                <p className="text-white text-sm font-bold mb-2">배치할 구역 선택</p>
-                <div className="flex flex-wrap gap-2">
-                  {setupZoneOptions.map(zone => (
-                    <button key={zone}
-                      onClick={() => handlePlaceCharacter(selectedSetupCharId, zone)}
-                      disabled={actionLoading}
-                      className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
-                      {ZONE_CONFIGS[zone].displayName}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <p className="text-zinc-500 text-xs mt-1">
+              {selectedSetupCharId
+                ? `${CHARACTER_CONFIGS[game!.characters[selectedSetupCharId]?.characterId]?.name} 선택됨 — 맵에서 구역을 클릭하세요`
+                : '맵 하단 카드에서 캐릭터를 선택하세요'}
+            </p>
           </div>
         )
       }
@@ -1611,13 +1584,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
         return (
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2">
               <p className="text-white text-sm font-bold">목적지 선택</p>
-              {countdown !== null && (
-                <span className={`text-xs font-mono tabular-nums ${countdown <= 10 ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
-                  ⏰ {countdown}초
-                </span>
-              )}
             </div>
             {myMovingCharData && (
               <p className="text-zinc-400 text-xs mb-2">
@@ -1874,11 +1842,6 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               )
             ) : (
               <p className="text-zinc-500 text-sm">해당 구역 플레이어들이 아이템 사용 중...</p>
-            )}
-            {countdown !== null && (
-              <p className={`text-lg font-mono font-bold mt-3 ${countdown <= 5 ? 'text-red-400' : 'text-zinc-400'}`}>
-                ⏰ {countdown}초
-              </p>
             )}
           </div>
         )
@@ -2174,16 +2137,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         // ── 투표 진행 화면 ────────────────────────────────────
         return (
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2">
               <p className="text-sm text-zinc-400">
                 <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel}
                 {vote.round > 0 && <span className="text-zinc-500 text-xs"> (재투표 {vote.round}회차)</span>}
               </p>
-              {countdown !== null && (
-                <span className={`text-xs font-mono tabular-nums ${countdown <= 10 ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
-                  ⏰ {countdown}초
-                </span>
-              )}
             </div>
 
             {canVote ? (
@@ -2259,29 +2217,55 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     <>
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-zinc-800 gap-2 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-red-400 font-bold text-sm shrink-0">MOH</span>
-          <span className="hidden sm:inline text-zinc-600 shrink-0">|</span>
-          <span className="hidden sm:inline text-zinc-400 text-xs shrink-0">라운드 {game.round}</span>
-          <span className="bg-zinc-800 text-yellow-400 text-xs px-2 py-0.5 rounded-full shrink-0">
-            {PHASE_LABEL[game.phase] ?? game.phase}
-          </span>
-          <span className="text-xs text-zinc-500 truncate min-w-0">
-            👮 <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="hidden sm:inline text-xs text-zinc-600">#{roomCode}</span>
-          <button onClick={() => setShowRules(true)} className="text-zinc-500 hover:text-white text-xs transition-colors">📖</button>
-          <button onClick={async () => {
-            if (isHost) {
-              try { await deleteRoom(roomCode) } catch {}
-            }
-            onLeave()
-          }} className="text-zinc-500 hover:text-white text-xs transition-colors px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700">나가기</button>
-        </div>
-      </div>
+      {(() => {
+        const phaseMaxSec: Partial<Record<string, number>> = {
+          destination_seal: meta?.settings.sealTime ?? 60,
+          voting: meta?.settings.votingTime ?? 60,
+          weapon_use: 15,
+        }
+        const maxSec = phaseMaxSec[game.phase] ?? null
+        const timerPct = (maxSec && countdown !== null) ? Math.max(0, (countdown / maxSec) * 100) : null
+        const timerColor = timerPct === null ? '' : timerPct > 50 ? 'bg-blue-500' : timerPct > 25 ? 'bg-yellow-400' : 'bg-red-500'
+        return (
+          <>
+            <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-red-400 font-bold text-sm shrink-0">MOH</span>
+                <span className="hidden sm:inline text-zinc-600 shrink-0">|</span>
+                <span className="hidden sm:inline text-zinc-400 text-xs shrink-0">라운드 {game.round}</span>
+                <span className="bg-zinc-800 text-yellow-400 text-xs px-2 py-0.5 rounded-full shrink-0">
+                  {PHASE_LABEL[game.phase] ?? game.phase}
+                </span>
+                {countdown !== null && (
+                  <span className={`text-xs font-mono font-bold tabular-nums shrink-0 ${countdown <= 10 ? 'text-red-400' : 'text-zinc-400'}`}>
+                    {countdown}s
+                  </span>
+                )}
+                <span className="text-xs text-zinc-500 truncate min-w-0">
+                  👮 <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="hidden sm:inline text-xs text-zinc-600">#{roomCode}</span>
+                <button onClick={() => setShowRules(true)} className="text-zinc-500 hover:text-white text-xs transition-colors">📖</button>
+                <button onClick={async () => {
+                  if (isHost) { try { await deleteRoom(roomCode) } catch {} }
+                  onLeave()
+                }} className="text-zinc-500 hover:text-white text-xs transition-colors px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700">나가기</button>
+              </div>
+            </div>
+            {/* 타이머 progress bar */}
+            <div className="h-0.5 bg-zinc-800 shrink-0">
+              {timerPct !== null && (
+                <div
+                  className={`h-full ${timerColor} transition-all duration-500`}
+                  style={{ width: `${timerPct}%` }}
+                />
+              )}
+            </div>
+          </>
+        )
+      })()}
 
       {/* 숨기/등장 공지 + weapon_use 결과 + 좀비 플레이어 공지 + 트럭 수색 완료 — fixed 오버레이 */}
       {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce || game.lastZombiePlayerAnnounce || game.lastItemSearchAnnounce) && (
@@ -2378,43 +2362,105 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               )
             })}
 
-            {/* ── 손패 카드 (setup_place, 내 턴, 주사위 굴린 후) ── */}
-            {game.phase === 'setup_place' && isMyTurnToPlace && !!game.setupDiceRoll && myUnplacedChars.length > 0 && (
-              <>
-                {myUnplacedChars.map((char, i) => {
+            {/* ── 손패 카드 (맵 하단 반반 걸침) ── */}
+            {(() => {
+              // 캐릭터 탭: setup_place 내 턴 + 주사위 굴린 후
+              const charCards = handTab === 'chars'
+                && game.phase === 'setup_place' && isMyTurnToPlace && !!game.setupDiceRoll
+                ? myUnplacedChars : []
+
+              // 아이템 탭
+              const itemCards = handTab === 'items' ? myItemIds : []
+
+              const cards = charCards.length > 0 ? charCards : itemCards
+              if (cards.length === 0) return null
+
+              return (cards as (typeof charCards[number] | string)[]).map((card, i) => {
+                const isCharCard = handTab === 'chars' && charCards.length > 0
+                const pos = getHandCardPos(i, cards.length)
+
+                if (isCharCard) {
+                  const char = card as typeof charCards[number]
                   const cfg = CHARACTER_CONFIGS[char.characterId]
-                  const pos = getHandCardPos(i, myUnplacedChars.length)
                   const isSelected = selectedSetupCharId === char.id
                   const isPlacing = transitCharIds.has(char.id)
                   return (
-                    <div
-                      key={char.id}
+                    <div key={char.id}
                       onClick={() => { if (!isPlacing && !actionLoading) setSelectedSetupCharId(isSelected ? null : char.id) }}
                       style={{
-                        position: 'absolute',
-                        left: `${pos.x}%`,
-                        top: '100%',
+                        position: 'absolute', left: `${pos.x}%`, top: '100%',
                         transform: `translate(-50%, -50%)${isSelected ? ' translateY(-12px) scale(1.12)' : ''}`,
                         transition: 'transform 0.18s ease, opacity 0.15s ease',
-                        opacity: isPlacing ? 0 : 1,
-                        zIndex: 40,
+                        opacity: isPlacing ? 0 : 1, zIndex: 40,
                       }}
                       className={`cursor-pointer rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
-                        ${isSelected
-                          ? 'bg-yellow-600 ring-2 ring-yellow-300'
-                          : 'bg-zinc-800/90 border border-zinc-500 hover:border-zinc-300 hover:bg-zinc-700/90'
-                        }
-                        ${actionLoading ? 'pointer-events-none' : ''}
-                      `}
+                        ${isSelected ? 'bg-yellow-600 ring-2 ring-yellow-300' : 'bg-zinc-800/90 border border-zinc-500 hover:border-zinc-300 hover:bg-zinc-700/90'}
+                        ${actionLoading ? 'pointer-events-none' : ''}`}
                     >
                       <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
                       <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
                     </div>
                   )
-                })}
-              </>
-            )}
+                } else {
+                  // 아이템 카드
+                  const instanceId = card as string
+                  const itemId = instanceIdToItemId(instanceId)
+                  const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
+                  const kills = cfg?.zombieKill ?? 0
+                  const isConfirming = confirmingItems.has(instanceId)
+                  const isStaged = stagedWeapons.has(instanceId) || stagedHideItemId === instanceId
+                    || stagedSprintItemId === instanceId || stagedHardwareItemId === instanceId
+                  const weaponItemIds = ['axe', 'pistol', 'shotgun', 'bat', 'grenade', 'chainsaw']
+                  const amInWeaponZone = game.phase === 'weapon_use' && (() => {
+                    const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+                    return game.zones[zone]?.characterIds.some(id => game.characters[id]?.playerId === uid && game.characters[id]?.isAlive) ?? false
+                  })()
+                  const notConfirmed = !game.weaponUseStatus[uid ?? '']
+                  const canUseCctv = itemId === 'cctv' && !!game.lastDiceRoll && !game.cctvViewers.includes(uid ?? '')
+                  const canUseThreat = itemId === 'threat' && game.phase === 'voting' && !!game.currentVote && !!uid && game.currentVote.eligibleVoters.includes(uid)
+                  const canUseWeapon = weaponItemIds.includes(itemId) && amInWeaponZone && notConfirmed && !isStaged
+                  const canUseHide = itemId === 'hidden_card' && amInWeaponZone && notConfirmed && !stagedHideItemId
+                  const canUseSprint = itemId === 'sprint' && amInWeaponZone && notConfirmed && !stagedSprintItemId
+                  const canUseHardware = itemId === 'hardware' && amInWeaponZone && notConfirmed && !stagedHardwareItemId
+                  const isUsable = canUseCctv || canUseThreat || canUseWeapon || canUseHide || canUseSprint || canUseHardware
+
+                  return (
+                    <div key={instanceId}
+                      onClick={() => { if (isUsable && !isConfirming) setConfirmingItems(prev => new Set(prev).add(instanceId)) }}
+                      style={{
+                        position: 'absolute', left: `${pos.x}%`, top: '100%',
+                        transform: 'translate(-50%, -50%)',
+                        transition: 'transform 0.18s ease', zIndex: 40,
+                      }}
+                      className={`rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
+                        ${isConfirming ? 'bg-yellow-700 ring-2 ring-yellow-400' :
+                          isStaged ? 'bg-green-800 ring-2 ring-green-500' :
+                          isUsable ? 'bg-zinc-700 border border-zinc-400 cursor-pointer hover:border-white hover:scale-105' :
+                          'bg-zinc-800/80 border border-zinc-700 cursor-default opacity-60'}`}
+                    >
+                      <span className="text-2xl leading-none">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                      <span className="text-xs mt-0.5 font-medium text-white leading-tight text-center px-0.5">{cfg?.name ?? itemId}</span>
+                      {kills > 0 && (
+                        <span className="text-xs leading-none mt-0.5">{'💀'.repeat(kills)}</span>
+                      )}
+                    </div>
+                  )
+                }
+              })
+            })()}
           </div>
+          {/* 손패 탭 토글 */}
+          <div className="flex justify-center gap-1 mt-9 mb-1">
+            <button onClick={() => setHandTab('chars')}
+              className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${handTab === 'chars' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              캐릭터
+            </button>
+            <button onClick={() => setHandTab('items')}
+              className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${handTab === 'items' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              아이템{myItemIds.length > 0 ? ` (${myItemIds.length})` : ''}
+            </button>
+          </div>
+
           {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
           {game.phase === 'setup_place' && (
             <div className="mt-3 bg-yellow-900/30 border border-yellow-700/50 rounded-xl px-3 py-2 text-center">
