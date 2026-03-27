@@ -989,9 +989,10 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   async function handleRollSetup() {
     if (!game || actionLoading) return
     setActionLoading(true)
-    const { state: next } = rollAndGetPlacementOptions(game)
-    await patchGameState(roomCode, { setupDiceRoll: next.setupDiceRoll })
-    setActionLoading(false)
+    try {
+      const { state: next } = rollAndGetPlacementOptions(game)
+      await patchGameState(roomCode, { setupDiceRoll: next.setupDiceRoll })
+    } finally { setActionLoading(false) }
   }
 
   async function handlePlaceCharacter(charInstanceId: string, zone: ZoneName) {
@@ -1004,27 +1005,28 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }
     let next = placeCharacter(game, charInstanceId, zone)
     if (next.setupPlacementOrder.length === 0) next = startFirstRound(next)
-    await patchGameState(roomCode, {
-      characters: next.characters,
-      zones: next.zones,
-      setupPlacementOrder: next.setupPlacementOrder,
-      setupDiceRoll: null,
-      ...(next.phase !== game.phase ? {
-        phase: next.phase, round: next.round, lastDiceRoll: next.lastDiceRoll,
-        declarationOrder: next.declarationOrder,
-        currentEventZoneIndex: 0,
-      } : {}),
-    })
-    setSelectedSetupCharId(null)
-    setActionLoading(false)
+    try {
+      await patchGameState(roomCode, {
+        characters: next.characters,
+        zones: next.zones,
+        setupPlacementOrder: next.setupPlacementOrder,
+        setupDiceRoll: null,
+        ...(next.phase !== game.phase ? {
+          phase: next.phase, round: next.round, lastDiceRoll: next.lastDiceRoll,
+          declarationOrder: next.declarationOrder,
+          currentEventZoneIndex: 0,
+        } : {}),
+      })
+      setSelectedSetupCharId(null)
+    } finally { setActionLoading(false) }
   }
 
   // ── roll_dice ────────────────────────────────────────────────
   async function handleRollDice() {
     if (!game || actionLoading) return
     setActionLoading(true)
-    await submitSheriffRollRequest(roomCode)
-    setActionLoading(false)
+    try { await submitSheriffRollRequest(roomCode) }
+    finally { setActionLoading(false) }
   }
 
   // ── character_select ─────────────────────────────────────────
@@ -1040,13 +1042,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     if (!uid || myDeclaredCharId || actionLoading) return
     if (currentDeclarerId !== uid) return  // 내 차례가 아님
     setActionLoading(true)
-    await declareCharacter(roomCode, {
-      playerId: uid,
-      characterId: charInstanceId,
-      order: game!.declarationOrder.indexOf(uid),
-      declaredAt: Date.now(),
-    })
-    setActionLoading(false)
+    try {
+      await declareCharacter(roomCode, {
+        playerId: uid,
+        characterId: charInstanceId,
+        order: game!.declarationOrder.indexOf(uid),
+        declaredAt: Date.now(),
+      })
+    } finally { setActionLoading(false) }
   }
 
   // ── destination_seal ─────────────────────────────────────────
@@ -1058,15 +1061,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   async function handleSelectDestination(zone: ZoneName) {
     if (!uid || myDestConfirmed || actionLoading) return
     setActionLoading(true)
-    await selectDestination(roomCode, zone)
-    setActionLoading(false)
+    try { await selectDestination(roomCode, zone) }
+    finally { setActionLoading(false) }
   }
 
   async function handleConfirmDestination() {
     if (!uid || !mySealedZone || myDestConfirmed || actionLoading) return
     setActionLoading(true)
-    await confirmDestination(roomCode)
-    setActionLoading(false)
+    try { await confirmDestination(roomCode) }
+    finally { setActionLoading(false) }
   }
 
   // ── voting ───────────────────────────────────────────────────
@@ -1076,15 +1079,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   async function handleSelectVote(targetPlayerId: string) {
     if (!uid || !game?.currentVote || myVoteConfirmed || actionLoading) return
     setActionLoading(true)
-    await selectVote(roomCode, targetPlayerId)
-    setActionLoading(false)
+    try { await selectVote(roomCode, targetPlayerId) }
+    finally { setActionLoading(false) }
   }
 
   async function handleConfirmVote() {
     if (!uid || !myVote || myVoteConfirmed || actionLoading) return
     setActionLoading(true)
-    await confirmVote(roomCode)
-    setActionLoading(false)
+    try { await confirmVote(roomCode) }
+    finally { setActionLoading(false) }
   }
 
   // ── 아이템 사용 핸들러 ────────────────────────────────────────
