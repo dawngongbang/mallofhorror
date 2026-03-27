@@ -2240,27 +2240,27 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     <>
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800">
-        <div className="flex items-center gap-3">
-          <span className="text-red-400 font-bold text-sm">MALL OF HORROR</span>
-          <span className="text-zinc-600">|</span>
-          <span className="text-zinc-400 text-xs">라운드 {game.round}</span>
-          <span className="bg-zinc-800 text-yellow-400 text-xs px-2 py-0.5 rounded-full">
+      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-zinc-800 gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-red-400 font-bold text-sm shrink-0">MOH</span>
+          <span className="hidden sm:inline text-zinc-600 shrink-0">|</span>
+          <span className="hidden sm:inline text-zinc-400 text-xs shrink-0">라운드 {game.round}</span>
+          <span className="bg-zinc-800 text-yellow-400 text-xs px-2 py-0.5 rounded-full shrink-0">
             {PHASE_LABEL[game.phase] ?? game.phase}
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-500">
-            보안관: <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
+          <span className="text-xs text-zinc-500 truncate min-w-0">
+            👮 <span className="text-white">{players[sheriffId]?.nickname ?? '?'}</span>
           </span>
-          <span className="text-xs text-zinc-600">#{roomCode}</span>
-          <button onClick={() => setShowRules(true)} className="text-zinc-600 hover:text-white text-xs transition-colors">📖 설명서</button>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:inline text-xs text-zinc-600">#{roomCode}</span>
+          <button onClick={() => setShowRules(true)} className="text-zinc-500 hover:text-white text-xs transition-colors">📖</button>
           <button onClick={async () => {
             if (isHost) {
               try { await deleteRoom(roomCode) } catch {}
             }
             onLeave()
-          }} className="text-zinc-600 hover:text-white text-xs transition-colors">나가기</button>
+          }} className="text-zinc-500 hover:text-white text-xs transition-colors px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700">나가기</button>
         </div>
       </div>
 
@@ -2333,9 +2333,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* 존 보드 */}
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-3 overflow-y-auto">
           {/* 맵 보드 */}
           <div className="relative w-full max-w-xl mx-auto aspect-square">
             <img
@@ -2361,7 +2361,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           </div>
           {/* 임시 보안관 공지 (초기 배치 중에만 표시) */}
           {game.phase === 'setup_place' && (
-            <div className="max-w-2xl mx-auto mt-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl px-4 py-2.5 text-center">
+            <div className="mt-3 bg-yellow-900/30 border border-yellow-700/50 rounded-xl px-3 py-2 text-center">
               <p className="text-yellow-300 text-sm">
                 ⭐ <span className="font-bold">{players[sheriffId]?.nickname ?? '?'}</span>님이 임시 보안관으로 선택되었습니다
               </p>
@@ -2379,14 +2379,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             if (isMovementPhase && !canSeeZones) {
               if (game.isRealSheriff) return null  // 정식보안관 있음 — 다른 플레이어는 숨김
               return (
-                <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 flex items-center gap-3">
+                <div className="mt-3 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 flex items-center gap-3 flex-wrap">
                   <span className="text-yellow-600 text-xs font-bold">🎲 이번 라운드 주사위</span>
                   <span className="text-zinc-600 text-xs">정식보안관이 없어 아무도 cctv를 확인하지 못했습니다</span>
                 </div>
               )
             }
             return (
-              <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+              <div className="mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-3 py-2 flex items-center gap-3 flex-wrap">
                 <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
                 {iAmRealSheriff && (
                   <div className="flex gap-1">
@@ -2411,13 +2411,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           })()}
 
           {/* 액션 패널 */}
-          <div className="max-w-2xl mx-auto mt-4 bg-zinc-900 rounded-2xl p-4">
+          <div className="mt-3 bg-zinc-900 rounded-2xl p-3">
             {renderActionPanel()}
           </div>
 
           {/* 내 아이템 패널 */}
           {myItemIds.length > 0 && (
-            <div className="max-w-2xl mx-auto mt-3 bg-zinc-900 rounded-2xl p-4">
+            <div className="mt-3 bg-zinc-900 rounded-2xl p-3">
               <p className="text-xs text-zinc-500 mb-2">내 아이템</p>
               <div className="flex flex-wrap gap-2">
                 {myItemIds.map(instanceId => {
@@ -2574,10 +2574,57 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </div>
             </div>
           )}
+          {/* 모바일 플레이어 목록 (데스크탑에서는 숨김) */}
+          <div className="md:hidden mt-3 -mx-3 px-3 pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {game.playerOrder.map(playerId => {
+                const player = players[playerId]
+                const isSheriff = playerId === sheriffId
+                const aliveChars = Object.values(game.characters).filter(c => c.playerId === playerId && c.isAlive)
+                const isDeclared = !!game.characterDeclarations[playerId]
+                const isDestConfirmed = !!game.destinationStatus[playerId]
+                const hasTempDest = !!game.sealedDestinations[playerId]
+                const hasVoteConfirmed = !!game.currentVote?.status[playerId]
+                const hasTempVote = !!game.currentVote?.votes[playerId]
+                const currentDeclarer = game.declarationOrder.find(pid => !game.characterDeclarations[pid])
+                const isCurrentTurn =
+                  (game.phase === 'character_select' && playerId === currentDeclarer) ||
+                  (game.phase === 'setup_place' && playerId === game.setupPlacementOrder[0])
+                let statusDot = ''
+                if (game.phase === 'character_select') statusDot = isDeclared ? '✓' : '...'
+                else if (game.phase === 'destination_seal') statusDot = isDestConfirmed ? '✓' : hasTempDest ? '●' : '...'
+                else if (game.phase === 'voting') statusDot = hasVoteConfirmed ? '✓' : hasTempVote ? '●' : '...'
+                return (
+                  <div key={playerId} className={`shrink-0 rounded-xl px-2.5 py-2 min-w-[72px] ${
+                    isCurrentTurn ? 'bg-yellow-950/60 ring-2 ring-yellow-500' : 'bg-zinc-800'
+                  }`}>
+                    <div className="flex items-center gap-1 mb-1">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${COLOR_BG[player?.color ?? ''] ?? 'bg-zinc-600'}`} />
+                      <span className={`text-xs font-medium truncate max-w-[56px] ${isCurrentTurn ? 'text-yellow-300' : 'text-white'}`}>
+                        {isCurrentTurn && '▶'}{player?.nickname ?? '?'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-between">
+                      <div className="flex items-center gap-0.5">
+                        {isSheriff && <span className="text-xs">👮</span>}
+                        {playerId === uid && <span className="text-blue-400 text-xs">나</span>}
+                        <span className="text-xs text-zinc-500">{aliveChars.length}명</span>
+                      </div>
+                      {statusDot && (
+                        <span className={`text-xs ${statusDot === '✓' ? 'text-green-400' : statusDot === '●' ? 'text-yellow-400' : 'text-zinc-600'}`}>
+                          {statusDot}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
-        {/* 플레이어 사이드바 */}
-        <div className="w-44 bg-zinc-900 border-l border-zinc-800 p-3 overflow-y-auto shrink-0">
+        {/* 플레이어 사이드바 (데스크탑 전용) */}
+        <div className="hidden md:block w-44 bg-zinc-900 border-l border-zinc-800 p-3 overflow-y-auto shrink-0">
           <p className="text-xs text-zinc-500 mb-3">플레이어</p>
           <div className="space-y-2">
             {game.playerOrder.map(playerId => {
