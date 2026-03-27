@@ -2356,7 +2356,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         {/* 존 보드 */}
         <div className="flex-1 p-3 overflow-y-auto">
           {/* 맵 보드 */}
-          <div className="relative w-full max-w-xl mx-auto aspect-square">
+          <div className="relative w-full max-w-2xl mx-auto aspect-square overflow-visible mb-10">
             <img
               src={`${import.meta.env.BASE_URL}map.jpg`}
               alt="몰오브호러 맵"
@@ -2393,13 +2393,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                       style={{
                         position: 'absolute',
                         left: `${pos.x}%`,
-                        top: `${pos.y}%`,
-                        transform: `translate(-50%, -100%)${isSelected ? ' translateY(-14px) scale(1.12)' : ''}`,
+                        top: '100%',
+                        transform: `translate(-50%, -50%)${isSelected ? ' translateY(-12px) scale(1.12)' : ''}`,
                         transition: 'transform 0.18s ease, opacity 0.15s ease',
                         opacity: isPlacing ? 0 : 1,
                         zIndex: 40,
                       }}
-                      className={`cursor-pointer rounded-2xl shadow-2xl flex flex-col items-center justify-center w-12 h-14 select-none
+                      className={`cursor-pointer rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
                         ${isSelected
                           ? 'bg-yellow-600 ring-2 ring-yellow-300'
                           : 'bg-zinc-800/90 border border-zinc-500 hover:border-zinc-300 hover:bg-zinc-700/90'
