@@ -73,12 +73,15 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
     await setReady(roomCode, next)
   }
 
-  async function handleStartGame() {
+  async function handleStartGame(forceStart = false) {
     if (!meta || starting) return
+    if (!forceStart && !allReady) return  // 일반 버튼은 allReady 필요
+    const currentPlayers = Object.keys(players).length > 0 ? players : undefined
+    if (!currentPlayers) { setStartError('플레이어 정보 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return }
     setStarting(true)
     setStartError('')
     try {
-      await startGame(roomCode, players, meta.settings)
+      await startGame(roomCode, currentPlayers, meta.settings)
     } catch (e: any) {
       setStartError(e?.message ?? '게임 시작 실패')
       setStarting(false)
@@ -216,13 +219,22 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
         <div className="space-y-2">
           {startError && <p className="text-red-400 text-xs text-center">{startError}</p>}
           {isHost ? (
-            <button
-              onClick={handleStartGame}
-              disabled={!allReady || starting}
-              className="w-full bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
-            >
-              {starting ? '게임 시작 중...' : allReady ? '게임 시작' : playerList.length < 2 ? '2명 이상 필요' : '모두 준비 완료 시 시작 가능'}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleStartGame(false)}
+                disabled={!allReady || starting}
+                className="w-full bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
+              >
+                {starting ? '게임 시작 중...' : allReady ? '게임 시작' : playerList.length < 2 ? '2명 이상 필요' : '모두 준비 완료 시 시작 가능'}
+              </button>
+              <button
+                onClick={() => handleStartGame(true)}
+                disabled={starting}
+                className="w-full bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-300 font-medium rounded-xl py-2 text-xs transition-colors border border-zinc-600"
+              >
+                🧪 테스트 시작 (준비 없이)
+              </button>
+            </div>
           ) : (
             <button
               onClick={toggleReady}

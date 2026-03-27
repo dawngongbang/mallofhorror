@@ -2465,12 +2465,38 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             {/* ── 손패 카드 (맵 하단 반반 걸침) ── */}
             {(() => {
               // 캐릭터 탭: setup_place 내 턴 + 주사위 굴린 후
-              const charCards = handTab === 'chars'
+              const isSetupCharMode = handTab === 'chars'
                 && game.phase === 'setup_place' && isMyTurnToPlace && !!game.setupDiceRoll
-                ? myUnplacedChars : []
+              const charCards = isSetupCharMode ? myUnplacedChars : []
+
+              // 캐릭터 탭: 게임 중 내 살아있는 캐릭터 표시
+              const isGameCharMode = handTab === 'chars' && game.phase !== 'setup_place'
 
               // 아이템 탭
               const itemCards = handTab === 'items' ? myItemIds : []
+
+              if (isGameCharMode) {
+                if (myAliveChars.length === 0) return null
+                return myAliveChars.map((char, i) => {
+                  const cfg = CHARACTER_CONFIGS[char.characterId]
+                  const zoneCfg = ZONE_CONFIGS[char.zone]
+                  const pos = getHandCardPos(i, myAliveChars.length)
+                  return (
+                    <div key={char.id}
+                      style={{
+                        position: 'absolute', left: `${pos.x}%`, top: '100%',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 40,
+                      }}
+                      className="rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none bg-zinc-800/90 border border-zinc-600"
+                    >
+                      <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
+                      <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
+                      <span className="text-[10px] text-zinc-400 leading-tight mt-0.5 px-1 text-center">{zoneCfg?.name ?? char.zone}</span>
+                    </div>
+                  )
+                })
+              }
 
               const cards = charCards.length > 0 ? charCards : itemCards
               if (cards.length === 0) return null
