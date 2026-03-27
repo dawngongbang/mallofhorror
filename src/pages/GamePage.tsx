@@ -2244,7 +2244,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           <span className="text-xs text-zinc-600">#{roomCode}</span>
           <button onClick={() => setShowRules(true)} className="text-zinc-600 hover:text-white text-xs transition-colors">📖 설명서</button>
           <button onClick={async () => {
-            if (isHost) await deleteRoom(roomCode)
+            if (isHost) {
+              try { await deleteRoom(roomCode) } catch {}
+            }
             onLeave()
           }} className="text-zinc-600 hover:text-white text-xs transition-colors">나가기</button>
         </div>

@@ -9,13 +9,61 @@ export type AppScreen =
   | { screen: 'waiting'; roomCode: string }
   | { screen: 'game'; roomCode: string }
 
+const SESSION_KEY = 'moh_session'
+
+function saveSession(screen: AppScreen) {
+  if (screen.screen === 'lobby') {
+    sessionStorage.removeItem(SESSION_KEY)
+  } else {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(screen))
+  }
+}
+
+function restoreSession(): AppScreen {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (raw) return JSON.parse(raw) as AppScreen
+  } catch {}
+  return { screen: 'lobby' }
+}
+
 export default function App() {
   const [ready, setReady] = useState(false)
-  const [current, setCurrent] = useState<AppScreen>({ screen: 'lobby' })
+  const [current, setCurrent] = useState<AppScreen>(restoreSession)
 
   useEffect(() => {
     signInAsGuest().then(() => setReady(true))
   }, [])
+
+  // 뒤로가기 방지 — 게임/대기실 중에는 history state 유지
+  useEffect(() => {
+    if (current.screen === 'lobby') return
+    // 현재 상태를 history에 push해서 back 버튼 감지
+    history.pushState({ moh: current }, '')
+    const onPop = (e: PopStateEvent) => {
+      if (e.state?.moh) {
+        // 앱 내 상태로 복원 (실제 URL 이동 없음)
+        history.pushState({ moh: current }, '')
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [current])
+
+  // 탭 닫기/새로고침 경고 (게임 중)
+  useEffect(() => {
+    if (current.screen !== 'game') return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [current.screen])
+
+  function go(screen: AppScreen) {
+    saveSession(screen)
+    setCurrent(screen)
+  }
 
   if (!ready) {
     return (
@@ -29,7 +77,7 @@ export default function App() {
     return (
       <GamePage
         roomCode={current.roomCode}
-        onLeave={() => setCurrent({ screen: 'lobby' })}
+        onLeave={() => go({ screen: 'lobby' })}
       />
     )
   }
@@ -38,15 +86,15 @@ export default function App() {
     return (
       <WaitingRoomPage
         roomCode={current.roomCode}
-        onLeave={() => setCurrent({ screen: 'lobby' })}
-        onGameStart={() => setCurrent({ screen: 'game', roomCode: current.roomCode })}
+        onLeave={() => go({ screen: 'lobby' })}
+        onGameStart={() => go({ screen: 'game', roomCode: current.roomCode })}
       />
     )
   }
 
   return (
     <LobbyPage
-      onEnterRoom={(roomCode) => setCurrent({ screen: 'waiting', roomCode })}
+      onEnterRoom={(roomCode) => go({ screen: 'waiting', roomCode })}
     />
   )
 }
