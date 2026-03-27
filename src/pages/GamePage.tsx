@@ -1200,7 +1200,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     const isDestInvalid = game!.phase === 'destination_seal'
       && !myDestConfirmed
       && !isDestSelectable
-    const isSelectedDest = mySealedZone === zoneName
+    const isSelectedDest = game!.phase === 'destination_seal' && mySealedZone === zoneName
     const isHoveredDest = hoveredZone === zoneName && isDestSelectable
 
     // setup_place: 내 차례 + 주사위 굴린 후 + 캐릭터 선택 후
@@ -1279,7 +1279,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           {chars.map(char => {
             const owner = players[char.playerId]
             const charConfig = CHARACTER_CONFIGS[char.characterId]
-            const isMoving = game!.characterDeclarations[char.playerId]?.characterId === char.id
+            const isMovingPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game!.phase)
+            const isMoving = isMovingPhase && game!.characterDeclarations[char.playerId]?.characterId === char.id
             const isHidden = !!(game!.hiddenCharacters?.[char.id])
             const isMyChar = char.playerId === uid && char.isAlive && !isHidden
             const isClickableChar = isMyTurnToSelect && isMyChar

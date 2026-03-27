@@ -120,6 +120,11 @@ export function initRoundState(state: GameState): GameState {
     zombiePlayerZoneChoices: {},
     lastZombiePlayerAnnounce: null,
     lastWeaponUseAnnounce: null,
+    lastItemSearchAnnounce: null,
+    lastVoteAnnounce: null,
+    itemSearchWinnerId: null,
+    itemSearchChoice: null,
+    pendingVictimSelection: null,
   }
 }
 
