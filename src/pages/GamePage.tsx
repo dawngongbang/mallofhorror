@@ -257,6 +257,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const prevCharZones = useRef<Record<string, string>>({})
   const [confirmingItems, setConfirmingItems] = useState<Set<string>>(new Set())
   const [handTab, setHandTab] = useState<'chars' | 'items'>('chars')
+  const [clickGuarded, setClickGuarded] = useState(false)
   const [showRules, setShowRules] = useState(false)
   const [hoveredCharId, setHoveredCharId] = useState<string | null>(null)
   const [hoveredZone, setHoveredZone] = useState<ZoneName | null>(null)
@@ -853,6 +854,20 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }, 5000)
     return () => clearTimeout(timer)
   }, [!!game?.lastItemSearchAnnounce, isHost, roomCode])
+
+  // ── 캐릭터 선택이 필요한 순간 자동으로 캐릭터 탭으로 전환 ──────
+  useEffect(() => {
+    if (!game || !uid) return
+    const pvs = game.pendingVictimSelection
+    const isMyVictimTurn = pvs && !pvs.chosenCharacterId && pvs.loserPlayerId === uid
+    if (game.phase === 'character_select' || isMyVictimTurn || stagedHideItemId) {
+      setHandTab('chars')
+      // 탭 전환 직후 ghost click 방지: 400ms 동안 카드 클릭 차단
+      setClickGuarded(true)
+      const t = setTimeout(() => setClickGuarded(false), 400)
+      return () => clearTimeout(t)
+    }
+  }, [game?.phase, game?.pendingVictimSelection?.loserPlayerId, game?.pendingVictimSelection?.chosenCharacterId, stagedHideItemId, uid])
 
   // ── dice_reveal: 3초 후 자동 좀비 배치 ───────────────────────
   useEffect(() => {
@@ -2477,25 +2492,69 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
               if (isGameCharMode) {
                 if (myAliveChars.length === 0) return null
+
+                // 각 모드 판별
                 const isCharSelectPhase = game.phase === 'character_select'
-                const canDeclare = isCharSelectPhase && !myDeclaredCharId && currentDeclarerId === uid && !actionLoading
-                return myAliveChars.map((char, i) => {
+                const canDeclare = isCharSelectPhase && !myDeclaredCharId && currentDeclarerId === uid && !actionLoading && !clickGuarded
+
+                const pvs = game.pendingVictimSelection
+                const isVictimMode = game.phase === 'voting' && !!pvs && !pvs.chosenCharacterId && pvs.loserPlayerId === uid
+
+                const weaponZone = game.phase === 'weapon_use' ? EVENT_ZONE_ORDER[game.currentEventZoneIndex] : null
+                const isHideMode = !!stagedHideItemId && !!weaponZone
+
+                // 모드별로 표시할 캐릭터 필터링
+                let displayChars = myAliveChars
+                if (isVictimMode && pvs) {
+                  displayChars = myAliveChars.filter(c =>
+                    game.zones[pvs.zone]?.characterIds.includes(c.id) && !game.hiddenCharacters?.[c.id]
+                  )
+                } else if (isHideMode && weaponZone) {
+                  displayChars = myAliveChars.filter(c => game.zones[weaponZone]?.characterIds.includes(c.id))
+                }
+                if (displayChars.length === 0) return null
+
+                return displayChars.map((char, i) => {
                   const cfg = CHARACTER_CONFIGS[char.characterId]
                   const zoneCfg = ZONE_CONFIGS[char.zone]
-                  const pos = getHandCardPos(i, myAliveChars.length)
+                  const pos = getHandCardPos(i, displayChars.length)
+
                   const isDeclared = isCharSelectPhase && myDeclaredCharId === char.id
-                  const isClickable = canDeclare
+                  const isSelectedHide = isHideMode && stagedHideCharId === char.id
+                  const isHighlighted = isDeclared || isSelectedHide
+
+                  let isClickable = false
+                  let onClick: (() => void) | undefined
+                  if (canDeclare) {
+                    isClickable = true
+                    onClick = () => handleDeclareCharacter(char.id)
+                  } else if (isVictimMode && !actionLoading) {
+                    isClickable = true
+                    onClick = async () => {
+                      setActionLoading(true)
+                      try { await submitVictimChoice(roomCode, char.id) }
+                      finally { setActionLoading(false) }
+                    }
+                  } else if (isHideMode) {
+                    isClickable = true
+                    onClick = () => setStagedHideCharId(char.id)
+                  }
+
                   return (
                     <div key={char.id}
-                      onClick={() => { if (isClickable) handleDeclareCharacter(char.id) }}
+                      onClick={onClick}
                       style={{
                         position: 'absolute', left: `${pos.x}%`, top: '100%',
-                        transform: `translate(-50%, -50%)${isDeclared ? ' translateY(-10px) scale(1.1)' : ''}`,
+                        transform: `translate(-50%, -50%)${isHighlighted ? ' translateY(-10px) scale(1.1)' : ''}`,
                         transition: 'transform 0.18s ease',
                         zIndex: 40,
                       }}
                       className={`rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
-                        ${isDeclared ? 'bg-yellow-600 ring-2 ring-yellow-300' : isClickable ? 'bg-zinc-800/90 border border-zinc-400 hover:border-white hover:bg-zinc-700/90 cursor-pointer' : 'bg-zinc-800/90 border border-zinc-600'}`}
+                        ${isHighlighted
+                          ? (isVictimMode ? 'bg-red-700 ring-2 ring-red-400' : isHideMode ? 'bg-purple-700 ring-2 ring-purple-400' : 'bg-yellow-600 ring-2 ring-yellow-300')
+                          : isClickable
+                          ? 'bg-zinc-800/90 border border-zinc-400 hover:border-white hover:bg-zinc-700/90 cursor-pointer'
+                          : 'bg-zinc-800/90 border border-zinc-600'}`}
                     >
                       <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
                       <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
