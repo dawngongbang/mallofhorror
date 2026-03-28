@@ -2477,18 +2477,25 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
               if (isGameCharMode) {
                 if (myAliveChars.length === 0) return null
+                const isCharSelectPhase = game.phase === 'character_select'
+                const canDeclare = isCharSelectPhase && !myDeclaredCharId && currentDeclarerId === uid && !actionLoading
                 return myAliveChars.map((char, i) => {
                   const cfg = CHARACTER_CONFIGS[char.characterId]
                   const zoneCfg = ZONE_CONFIGS[char.zone]
                   const pos = getHandCardPos(i, myAliveChars.length)
+                  const isDeclared = isCharSelectPhase && myDeclaredCharId === char.id
+                  const isClickable = canDeclare
                   return (
                     <div key={char.id}
+                      onClick={() => { if (isClickable) handleDeclareCharacter(char.id) }}
                       style={{
                         position: 'absolute', left: `${pos.x}%`, top: '100%',
-                        transform: 'translate(-50%, -50%)',
+                        transform: `translate(-50%, -50%)${isDeclared ? ' translateY(-10px) scale(1.1)' : ''}`,
+                        transition: 'transform 0.18s ease',
                         zIndex: 40,
                       }}
-                      className="rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none bg-zinc-800/90 border border-zinc-600"
+                      className={`rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
+                        ${isDeclared ? 'bg-yellow-600 ring-2 ring-yellow-300' : isClickable ? 'bg-zinc-800/90 border border-zinc-400 hover:border-white hover:bg-zinc-700/90 cursor-pointer' : 'bg-zinc-800/90 border border-zinc-600'}`}
                     >
                       <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
                       <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
