@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   declareCharacter,
   selectDestination,
@@ -71,8 +71,11 @@ export default function ActionPanel({
   stagedHideCharId,
   setStagedHideCharId,
   stagedSprintItemId,
+  setStagedSprintItemId,
   stagedSprintCharId,
+  setStagedSprintCharId,
   stagedSprintTargetZone,
+  setStagedSprintTargetZone,
   stagedHardwareItemId,
   setHoveredCharId,
   selectedSetupCharId,
@@ -85,6 +88,27 @@ export default function ActionPanel({
   const [truckKept, setTruckKept] = useState<string | null>(null)
   const [truckGiven, setTruckGiven] = useState<string | null>(null)
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
+
+  // 주사위 애니메이션 state
+  const [diceAnim, setDiceAnim] = useState<number[] | null>(null)
+  const lastDiceKey = useRef('')
+
+  useEffect(() => {
+    if (game?.phase !== 'dice_reveal' || !game.lastDiceRoll || uid !== game.playerOrder[game.sheriffIndex] || !game.isRealSheriff) return
+    const key = game.lastDiceRoll.dice.join(',')
+    if (lastDiceKey.current === key) return
+    lastDiceKey.current = key
+    const real = game.lastDiceRoll.dice
+    let tick = 0
+    setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
+    const timer = setInterval(() => {
+      tick++
+      if (tick >= 14) { clearInterval(timer); setDiceAnim(null) }
+      else setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
+    }, 80)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.phase, game?.lastDiceRoll])
 
   // Derived values
   const sheriffId = game.playerOrder[game.sheriffIndex]
@@ -317,8 +341,8 @@ export default function ActionPanel({
         <div className="text-center">
           <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과 (보안관만 확인 가능)</p>
           <div className="flex justify-center gap-2 mb-3">
-            {roll.dice.map((d, i) => (
-              <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">
+            {(diceAnim ?? roll.dice).map((d, i) => (
+              <div key={`${i}-${d}`} className="dice-roll w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">
                 {d}
               </div>
             ))}
@@ -716,10 +740,65 @@ export default function ActionPanel({
               <p className="text-green-400 text-sm font-bold">✓ 완료 — 다른 플레이어 대기 중...</p>
             ) : (
               <div>
-                <p className="text-yellow-300 text-sm mb-2">아이템 패널에서 무기·숨기를 선택하세요.</p>
+                <p className="text-yellow-300 text-sm mb-2">손패에서 무기·아이템을 선택하세요.</p>
                 {stagedWeapons.size > 0 && (
                   <p className="text-green-400 text-xs mb-1">무기 {stagedWeapons.size}장 선택됨</p>
                 )}
+                {stagedSprintItemId && (() => {
+                  const myCharsInZoneSprint = game!.zones[zone]?.characterIds
+                    .filter(id => game!.characters[id]?.playerId === uid && game!.characters[id]?.isAlive
+                      && !game!.hiddenCharacters?.[id]) ?? []
+                  const availableZones = (Object.keys(ZONE_CONFIGS) as ZoneName[]).filter(z => {
+                    if (z === zone) return false
+                    const cfg = ZONE_CONFIGS[z]
+                    if (cfg.maxCapacity === Infinity) return true
+                    return game!.zones[z].characterIds.filter(id => game!.characters[id]?.isAlive).length < cfg.maxCapacity
+                  })
+                  return (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-cyan-300 text-xs font-bold">👟 스프린트 — 이동할 캐릭터:</p>
+                        <button onClick={() => { setStagedSprintItemId(null); setStagedSprintCharId(null); setStagedSprintTargetZone(null) }}
+                          className="text-xs text-zinc-500 hover:text-red-400 transition-colors">취소</button>
+                      </div>
+                      <div className="flex gap-1 flex-wrap justify-center mb-1">
+                        {myCharsInZoneSprint.map(charId => {
+                          const char = game!.characters[charId]
+                          const cfg = CHARACTER_CONFIGS[char?.characterId]
+                          return (
+                            <button key={charId} onClick={() => setStagedSprintCharId(charId)}
+                              className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                                stagedSprintCharId === charId
+                                  ? 'bg-cyan-700 border-cyan-400 text-white font-bold'
+                                  : 'bg-zinc-700 border-zinc-500 text-zinc-300 hover:border-cyan-400'
+                              }`}>
+                              {cfg?.name ?? charId}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {stagedSprintCharId && (
+                        <div className="flex gap-1 flex-wrap justify-center">
+                          {availableZones.map(z => (
+                            <button key={z} onClick={() => setStagedSprintTargetZone(z)}
+                              className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                                stagedSprintTargetZone === z
+                                  ? 'bg-cyan-700 border-cyan-400 text-white font-bold'
+                                  : 'bg-zinc-700 border-zinc-500 text-zinc-300 hover:border-cyan-400'
+                              }`}>
+                              {ZONE_CONFIGS[z].displayName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {stagedSprintCharId && stagedSprintTargetZone && (
+                        <p className="text-cyan-400 text-xs mt-1">
+                          {CHARACTER_CONFIGS[game!.characters[stagedSprintCharId]?.characterId]?.name} → {ZONE_CONFIGS[stagedSprintTargetZone].displayName} ✓
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
                 {stagedHideItemId && (() => {
                   const myCharsInZoneHide = game!.zones[zone]?.characterIds
                     .filter(id => game!.characters[id]?.playerId === uid && game!.characters[id]?.isAlive) ?? []

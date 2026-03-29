@@ -20,7 +20,6 @@ import {
   ZONE_MAP_POSITIONS, getZoneCenter, getHandCardPos, getPlayerSpawnPos,
   MovingToken, MovingTokenState, instanceIdToItemId,
 } from './game/constants'
-import ItemPanel from './game/ItemPanel'
 
 import { normalizeGame } from './game/normalizeGame'
 
@@ -612,17 +611,53 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   const canUseHardware = itemId === 'hardware' && amInWeaponZone && notConfirmed && !stagedHardwareItemId
                   const isUsable = canUseCctv || canUseThreat || canUseWeapon || canUseHide || canUseSprint || canUseHardware
 
+                  const handleCancelStaged = () => {
+                    if (stagedWeapons.has(instanceId)) {
+                      setStagedWeapons(prev => { const next = new Set(prev); next.delete(instanceId); return next })
+                    } else if (stagedHideItemId === instanceId) {
+                      setStagedHideItemId(null); setStagedHideCharId(null)
+                    } else if (stagedSprintItemId === instanceId) {
+                      setStagedSprintItemId(null); setStagedSprintCharId(null); setStagedSprintTargetZone(null)
+                    } else if (stagedHardwareItemId === instanceId) {
+                      setStagedHardwareItemId(null)
+                    }
+                  }
+
+                  if (isConfirming) {
+                    return (
+                      <div key={instanceId}
+                        style={{ position: 'absolute', left: `${pos.x}%`, top: '100%', transform: 'translate(-50%, -50%)', zIndex: 50 }}
+                        className="rounded-2xl shadow-2xl flex flex-col items-center justify-center gap-1 bg-yellow-800 border-2 border-yellow-400 p-2 select-none"
+                      >
+                        <span className="text-xl leading-none">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                        <span className="text-[10px] text-yellow-200 font-bold leading-tight text-center px-1">{cfg?.name ?? itemId}</span>
+                        <div className="flex gap-1">
+                          <button onClick={() => handleUseItem(instanceId, itemId)} disabled={actionLoading}
+                            className="text-[10px] bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold px-2 py-0.5 rounded-lg transition-colors">
+                            사용
+                          </button>
+                          <button onClick={() => setConfirmingItems(prev => { const next = new Set(prev); next.delete(instanceId); return next })}
+                            className="text-[10px] bg-zinc-600 hover:bg-zinc-500 text-white px-1.5 py-0.5 rounded-lg transition-colors">
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div key={instanceId}
-                      onClick={() => { if (isUsable && !isConfirming) setConfirmingItems(prev => new Set(prev).add(instanceId)) }}
+                      onClick={() => {
+                        if (isStaged) { handleCancelStaged(); return }
+                        if (isUsable) setConfirmingItems(prev => new Set(prev).add(instanceId))
+                      }}
                       style={{
                         position: 'absolute', left: `${pos.x}%`, top: '100%',
                         transform: 'translate(-50%, -50%)',
                         transition: 'transform 0.18s ease', zIndex: 40,
                       }}
                       className={`rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
-                        ${isConfirming ? 'bg-yellow-700 ring-2 ring-yellow-400' :
-                          isStaged ? 'bg-green-800 ring-2 ring-green-500' :
+                        ${isStaged ? 'bg-green-800 ring-2 ring-green-500 cursor-pointer' :
                           isUsable ? 'bg-zinc-700 border border-zinc-400 cursor-pointer hover:border-white hover:scale-105' :
                           'bg-zinc-800/80 border border-zinc-700 cursor-default opacity-60'}`}
                     >
@@ -691,29 +726,6 @@ export default function GamePage({ roomCode, onLeave }: Props) {
             />
           </div>
 
-          {/* 내 아이템 패널 */}
-          <ItemPanel
-            game={game}
-            uid={uid}
-            myItemIds={myItemIds}
-            stagedWeapons={stagedWeapons}
-            setStagedWeapons={setStagedWeapons}
-            stagedHideItemId={stagedHideItemId}
-            setStagedHideItemId={setStagedHideItemId}
-            setStagedHideCharId={setStagedHideCharId}
-            stagedSprintItemId={stagedSprintItemId}
-            setStagedSprintItemId={setStagedSprintItemId}
-            stagedSprintCharId={stagedSprintCharId}
-            setStagedSprintCharId={setStagedSprintCharId}
-            stagedSprintTargetZone={stagedSprintTargetZone}
-            setStagedSprintTargetZone={setStagedSprintTargetZone}
-            stagedHardwareItemId={stagedHardwareItemId}
-            setStagedHardwareItemId={setStagedHardwareItemId}
-            confirmingItems={confirmingItems}
-            setConfirmingItems={setConfirmingItems}
-            actionLoading={actionLoading}
-            onUseItem={handleUseItem}
-          />
 
           <MobilePlayerList game={game} players={players} uid={uid} sheriffId={sheriffId} />
         </div>
