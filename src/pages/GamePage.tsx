@@ -2454,50 +2454,84 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* 존 보드 */}
         <div className="flex-1 p-3 overflow-y-auto">
-          {/* 좀비 배치 배너 — 맵 상단 고정 높이 */}
-          <div className="w-full max-w-2xl mx-auto mb-2 h-14 flex items-center justify-center">
-            {game.phase === 'zombie_spawn' && (() => {
-              const batches = game.zombieSpawnBatches ?? []
-              const step = game.zombieSpawnStep
-              const batch = batches[step] ?? null
-              if (!batch) return null
-              if (batch.type === 'dice') {
-                const lines = Object.entries(batch.zones).map(([zone, cnt]) =>
-                  `${ZONE_CONFIGS[zone as import('../engine/types').ZoneName]?.displayName} +${cnt}마리`
-                ).join('  /  ')
+          {/* 이번 라운드 좀비 배너 — 맵 상단 고정 높이 */}
+          <div className="w-full max-w-2xl mx-auto mb-2 h-12 flex items-center">
+            {(() => {
+              // zombie_spawn 진행 중: 배치 단계 표시
+              if (game.phase === 'zombie_spawn') {
+                const batches = game.zombieSpawnBatches ?? []
+                const step = game.zombieSpawnStep
+                const batch = batches[step] ?? null
+                if (!batch) return null
+                if (batch.type === 'dice') {
+                  const lines = Object.entries(batch.zones).map(([zone, cnt]) =>
+                    `${ZONE_CONFIGS[zone as import('../engine/types').ZoneName]?.displayName} +${cnt}`
+                  ).join('  ')
+                  return (
+                    <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap">
+                      <span className="text-yellow-400 text-xs font-bold shrink-0">🎲 좀비 배치 ({step + 1}/{batches.length})</span>
+                      <span className="text-zinc-300 text-xs">{lines}</span>
+                    </div>
+                  )
+                }
+                if (batch.type === 'crowded') return (
+                  <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2">
+                    <span className="text-yellow-400 text-xs font-bold shrink-0">👥 좀비 배치 ({step + 1}/{batches.length})</span>
+                    <span className="text-red-300 text-xs">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
+                  </div>
+                )
+                if (batch.type === 'belle') return (
+                  <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2">
+                    <span className="text-yellow-400 text-xs font-bold shrink-0">💄 좀비 배치 ({step + 1}/{batches.length})</span>
+                    <span className="text-red-300 text-xs">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
+                  </div>
+                )
+                if (batch.type === 'zombie_player') {
+                  const pName = players[batch.playerId]?.nickname ?? batch.playerId
+                  return (
+                    <div className="w-full bg-red-950 rounded-xl px-3 py-2 flex items-center gap-2">
+                      <span className="text-yellow-400 text-xs font-bold shrink-0">🧟 좀비 배치 ({step + 1}/{batches.length})</span>
+                      <span className="text-red-300 text-xs">{pName}님이 {ZONE_CONFIGS[batch.zone].displayName}에 출현!</span>
+                    </div>
+                  )
+                }
+                return null
+              }
+
+              // 이번 라운드 좀비 정보 (주사위 공개 이후)
+              if (!game.lastDiceRoll || ['roll_dice', 'dice_reveal', 'setup_place'].includes(game.phase)) return null
+              const isMovementPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game.phase)
+              const iAmRealSheriff = uid === sheriffId && game.isRealSheriff
+              const iUsedCctv = uid ? game.cctvViewers.includes(uid) : false
+              const canSeeZones = iAmRealSheriff || iUsedCctv
+              if (isMovementPhase && !canSeeZones) {
+                if (game.isRealSheriff) return null
                 return (
-                  <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
-                    <span className="text-white text-sm font-bold">🎲 주사위 결과</span>
-                    <span className="text-zinc-300 text-xs ml-2">{lines}</span>
-                    <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+                  <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2">
+                    <span className="text-yellow-600 text-xs font-bold shrink-0">🧟 이번 라운드 좀비</span>
+                    <span className="text-zinc-500 text-xs">정식보안관 없어 CCTV 미확인</span>
                   </div>
                 )
               }
-              if (batch.type === 'crowded') return (
-                <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
-                  <span className="text-white text-sm font-bold">👥 사람이 제일 많은 구역</span>
-                  <span className="text-red-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
-                  <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
-                </div>
-              )
-              if (batch.type === 'belle') return (
-                <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
-                  <span className="text-white text-sm font-bold">💄 미녀가 제일 많은 구역</span>
-                  <span className="text-red-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
-                  <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
-                </div>
-              )
-              if (batch.type === 'zombie_player') {
-                const pName = players[batch.playerId]?.nickname ?? batch.playerId
-                return (
-                  <div className="w-full bg-red-950/90 rounded-xl px-3 py-2 text-center">
-                    <span className="text-red-300 text-sm font-bold">🧟 좀비가 된 {pName}님</span>
-                    <span className="text-zinc-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 출현!</span>
-                    <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+              return (
+                <div className="w-full bg-zinc-800 border border-yellow-900 rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-yellow-500 text-xs font-bold shrink-0">🧟 이번 라운드 좀비</span>
+                  {iAmRealSheriff && (
+                    <div className="flex gap-1">
+                      {game.lastDiceRoll.dice.map((d, i) => (
+                        <span key={i} className="w-5 h-5 bg-zinc-700 rounded text-[10px] font-bold text-white flex items-center justify-center">{d}</span>
+                      ))}
+                    </div>
+                  )}
+                  {iUsedCctv && !iAmRealSheriff && <span className="text-purple-400 text-xs">📷</span>}
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
+                      <span key={z} className="text-zinc-400 text-xs">{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
+                    ))}
                   </div>
-                )
-              }
-              return null
+                  {!game.isRealSheriff && <span className="text-zinc-600 text-xs">· 정식보안관 없음</span>}
+                </div>
+              )
             })()}
           </div>
 
@@ -2587,12 +2621,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     onClick = () => setStagedHideCharId(char.id)
                   }
 
+                  const isHovered = hoveredCharId === char.id
                   return (
                     <div key={char.id}
                       onClick={onClick}
+                      onMouseEnter={() => setHoveredCharId(char.id)}
+                      onMouseLeave={() => setHoveredCharId(null)}
                       style={{
                         position: 'absolute', left: `${pos.x}%`, top: '100%',
-                        transform: `translate(-50%, -50%)${isHighlighted ? ' translateY(-10px) scale(1.1)' : ''}`,
+                        transform: `translate(-50%, -50%)${isHighlighted || isHovered ? ' translateY(-10px) scale(1.1)' : ''}`,
                         transition: 'transform 0.18s ease',
                         zIndex: 40,
                       }}
@@ -2708,48 +2745,6 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               </p>
             </div>
           )}
-
-          {/* 주사위 배너: 이동 페이즈 중에는 정식보안관/CCTV 사용자만, 이동 완료 후 전체 공개 */}
-          {game.lastDiceRoll && !['roll_dice', 'dice_reveal', 'setup_place'].includes(game.phase) && (() => {
-            const isMovementPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game.phase)
-            const iAmRealSheriff = uid === sheriffId && game.isRealSheriff
-            const iUsedCctv = uid ? game.cctvViewers.includes(uid) : false
-            const canSeeZones = iAmRealSheriff || iUsedCctv
-
-            // 이동 페이즈 중 정보 접근 불가한 경우
-            if (isMovementPhase && !canSeeZones) {
-              if (game.isRealSheriff) return null  // 정식보안관 있음 — 다른 플레이어는 숨김
-              return (
-                <div className="mt-3 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 flex items-center gap-3 flex-wrap">
-                  <span className="text-yellow-600 text-xs font-bold">🎲 이번 라운드 주사위</span>
-                  <span className="text-zinc-600 text-xs">정식보안관이 없어 아무도 cctv를 확인하지 못했습니다</span>
-                </div>
-              )
-            }
-            return (
-              <div className="mt-3 bg-zinc-900 border border-yellow-800 rounded-xl px-3 py-2 flex items-center gap-3 flex-wrap">
-                <span className="text-yellow-600 text-xs font-bold">🧟 이번 라운드 좀비</span>
-                {iAmRealSheriff && (
-                  <div className="flex gap-1">
-                    {game.lastDiceRoll.dice.map((d, i) => (
-                      <span key={i} className="w-7 h-7 bg-zinc-700 rounded-lg flex items-center justify-center text-sm font-bold text-white">{d}</span>
-                    ))}
-                  </div>
-                )}
-                {iUsedCctv && !iAmRealSheriff && (
-                  <span className="text-purple-400 text-xs font-bold">📷 CCTV</span>
-                )}
-                <div className="flex flex-wrap gap-1 text-xs text-zinc-400">
-                  {Object.entries(game.lastDiceRoll.zombiesByZone).map(([z, count]) => (
-                    <span key={z}>{ZONE_CONFIGS[z as ZoneName]?.displayName} +{count}🧟</span>
-                  ))}
-                </div>
-                {!game.isRealSheriff && (
-                  <span className="text-zinc-600 text-xs">· 정식보안관 없음</span>
-                )}
-              </div>
-            )
-          })()}
 
           {/* 액션 패널 */}
           <div className="mt-3 bg-zinc-900 rounded-2xl p-3">
