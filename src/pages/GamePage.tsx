@@ -8,7 +8,7 @@ import {
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
 import { deleteRoom } from '../firebase/roomService'
-import { CHARACTER_CONFIGS, ITEM_CONFIGS, EVENT_ZONE_ORDER, ZONE_CONFIGS } from '../engine/constants'
+import { CHARACTER_CONFIGS, ITEM_CONFIGS, EVENT_ZONE_ORDER, ZONE_CONFIGS, DICE_TO_ZONE } from '../engine/constants'
 import type { GameState, Player, RoomMeta, ZoneName } from '../engine/types'
 import RulesModal from '../components/RulesModal'
 import { useHostLogic } from '../hooks/useHostLogic'
@@ -392,7 +392,39 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 return null
               }
 
-              if (!game.lastDiceRoll || ['roll_dice', 'dice_reveal', 'setup_place'].includes(game.phase)) return null
+              if (game.phase === 'setup_place') {
+                const d = game.setupDiceRoll as [number, number] | null
+                if (!d) return null
+                const currentSetupPlayerId = game.setupPlacementOrder[0] ?? null
+                const currentOwner = players[currentSetupPlayerId ?? '']
+                const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
+                const candidates = z1 === z2 ? [z1] : [z1, z2]
+                const available = candidates.filter(z => {
+                  if (game.zones[z]?.isClosed) return false
+                  const cfg = ZONE_CONFIGS[z]
+                  if (cfg.maxCapacity === Infinity) return true
+                  return game.zones[z].characterIds.filter(id => game.characters[id]?.isAlive).length < cfg.maxCapacity
+                })
+                const zoneOptions = available.length > 0 ? available : (Object.keys(game.zones) as ZoneName[]).filter(z => !game.zones[z].isClosed)
+                return (
+                  <div className="w-full bg-zinc-800 border border-blue-900 rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-blue-400 text-xs font-bold shrink-0">🎲 초기 배치</span>
+                    <div className="flex gap-1">
+                      {d.map((v, i) => (
+                        <span key={i} className="w-6 h-6 bg-zinc-700 rounded text-sm font-bold text-white flex items-center justify-center">{v}</span>
+                      ))}
+                    </div>
+                    <span className="text-yellow-400 text-xs font-semibold">
+                      → {zoneOptions.map(z => ZONE_CONFIGS[z]?.displayName).join(' 또는 ')}
+                    </span>
+                    {currentOwner && (
+                      <span className="text-zinc-500 text-xs">({currentOwner.nickname}님 배치 중)</span>
+                    )}
+                  </div>
+                )
+              }
+
+              if (!game.lastDiceRoll || ['roll_dice', 'dice_reveal'].includes(game.phase)) return null
               const isMovementPhase = ['character_select', 'destination_seal', 'destination_reveal', 'move_execute'].includes(game.phase)
               const iAmRealSheriff = uid === sheriffId && game.isRealSheriff
               const iUsedCctv = uid ? game.cctvViewers.includes(uid) : false

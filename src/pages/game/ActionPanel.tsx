@@ -89,7 +89,7 @@ export default function ActionPanel({
   const [truckGiven, setTruckGiven] = useState<string | null>(null)
   const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
 
-  // 주사위 애니메이션 state
+  // 주사위 애니메이션 state (좀비 주사위)
   const [diceAnim, setDiceAnim] = useState<number[] | null>(null)
   const lastDiceKey = useRef('')
 
@@ -109,6 +109,27 @@ export default function ActionPanel({
     return () => clearInterval(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.phase, game?.lastDiceRoll])
+
+  // 초기배치 주사위 애니메이션
+  const [setupDiceAnim, setSetupDiceAnim] = useState<[number, number] | null>(null)
+  const lastSetupDiceKey = useRef('')
+
+  useEffect(() => {
+    if (!game?.setupDiceRoll || game.setupPlacementOrder[0] !== uid) return
+    const d = game.setupDiceRoll as [number, number]
+    const key = d.join(',')
+    if (lastSetupDiceKey.current === key) return
+    lastSetupDiceKey.current = key
+    let tick = 0
+    setSetupDiceAnim([Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)])
+    const timer = setInterval(() => {
+      tick++
+      if (tick >= 12) { clearInterval(timer); setSetupDiceAnim(null) }
+      else setSetupDiceAnim([Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)])
+    }, 80)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.setupDiceRoll])
 
   // Derived values
   const sheriffId = game.playerOrder[game.sheriffIndex]
@@ -253,15 +274,20 @@ export default function ActionPanel({
         const d = game!.setupDiceRoll as [number, number] | null
         return (
           <div className="text-center">
-            <p className="text-zinc-400 text-sm mb-1">
+            <p className="text-zinc-400 text-sm mb-2">
               <span className="text-white font-bold">{currentOwner?.nickname}</span>님이 캐릭터 배치 중...
             </p>
             {d ? (
-              <p className="text-xs text-zinc-500">
-                🎲 {d[0]}, {d[1]} →{' '}
-                <span className="text-yellow-400">{setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}</span>
-                {' '}중 선택
-              </p>
+              <>
+                <div className="flex justify-center gap-2 mb-1">
+                  {d.map((v, i) => (
+                    <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">{v}</div>
+                  ))}
+                </div>
+                <p className="text-yellow-400 text-xs font-semibold">
+                  → {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
+                </p>
+              </>
             ) : (
               <p className="text-zinc-600 text-xs">주사위 대기 중...</p>
             )}
@@ -283,17 +309,26 @@ export default function ActionPanel({
       }
 
       const d = game!.setupDiceRoll as [number, number]
+      const displayD = setupDiceAnim ?? d
       return (
         <div className="text-center">
-          <p className="text-xs text-zinc-500">
-            🎲 {d[0]}, {d[1]} →{' '}
-            <span className="text-yellow-400">{setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}</span>
-          </p>
-          <p className="text-zinc-500 text-xs mt-1">
-            {selectedSetupCharId
-              ? `${CHARACTER_CONFIGS[game!.characters[selectedSetupCharId]?.characterId]?.name} 선택됨 — 맵에서 구역을 클릭하세요`
-              : '맵 하단 카드에서 캐릭터를 선택하세요'}
-          </p>
+          <div className="flex justify-center gap-3 mb-2">
+            {(displayD as [number, number]).map((v, i) => (
+              <div key={`${i}-${v}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white">{v}</div>
+            ))}
+          </div>
+          {!setupDiceAnim && (
+            <>
+              <p className="text-yellow-400 text-sm font-bold mb-1">
+                {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
+              </p>
+              <p className="text-zinc-500 text-xs">
+                {selectedSetupCharId
+                  ? `${CHARACTER_CONFIGS[game!.characters[selectedSetupCharId]?.characterId]?.name} 선택됨 — 맵에서 구역을 클릭하세요`
+                  : '맵 하단 카드에서 캐릭터를 선택하세요'}
+              </p>
+            </>
+          )}
         </div>
       )
     }
