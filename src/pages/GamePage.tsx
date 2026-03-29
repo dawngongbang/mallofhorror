@@ -2454,6 +2454,53 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* 존 보드 */}
         <div className="flex-1 p-3 overflow-y-auto">
+          {/* 좀비 배치 배너 — 맵 상단 고정 높이 */}
+          <div className="w-full max-w-2xl mx-auto mb-2 h-14 flex items-center justify-center">
+            {game.phase === 'zombie_spawn' && (() => {
+              const batches = game.zombieSpawnBatches ?? []
+              const step = game.zombieSpawnStep
+              const batch = batches[step] ?? null
+              if (!batch) return null
+              if (batch.type === 'dice') {
+                const lines = Object.entries(batch.zones).map(([zone, cnt]) =>
+                  `${ZONE_CONFIGS[zone as import('../engine/types').ZoneName]?.displayName} +${cnt}마리`
+                ).join('  /  ')
+                return (
+                  <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
+                    <span className="text-white text-sm font-bold">🎲 주사위 결과</span>
+                    <span className="text-zinc-300 text-xs ml-2">{lines}</span>
+                    <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+                  </div>
+                )
+              }
+              if (batch.type === 'crowded') return (
+                <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
+                  <span className="text-white text-sm font-bold">👥 사람이 제일 많은 구역</span>
+                  <span className="text-red-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
+                  <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+                </div>
+              )
+              if (batch.type === 'belle') return (
+                <div className="w-full bg-zinc-800/90 rounded-xl px-3 py-2 text-center">
+                  <span className="text-white text-sm font-bold">💄 미녀가 제일 많은 구역</span>
+                  <span className="text-red-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
+                  <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+                </div>
+              )
+              if (batch.type === 'zombie_player') {
+                const pName = players[batch.playerId]?.nickname ?? batch.playerId
+                return (
+                  <div className="w-full bg-red-950/90 rounded-xl px-3 py-2 text-center">
+                    <span className="text-red-300 text-sm font-bold">🧟 좀비가 된 {pName}님</span>
+                    <span className="text-zinc-300 text-xs ml-2">{ZONE_CONFIGS[batch.zone].displayName}에 출현!</span>
+                    <span className="text-zinc-500 text-xs ml-2">({step + 1}/{batches.length})</span>
+                  </div>
+                )
+              }
+              return null
+            })()}
+          </div>
+
           {/* 맵 보드 */}
           <div className="relative w-full max-w-2xl mx-auto aspect-square overflow-visible mb-10">
             <img

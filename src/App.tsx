@@ -1,8 +1,61 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { signInAsGuest } from './firebase/auth'
 import LobbyPage from './pages/LobbyPage'
 import WaitingRoomPage from './pages/WaitingRoomPage'
 import GamePage from './pages/GamePage'
+
+// ── 화면 에러 오버레이 ───────────────────────────────────────────
+type ErrEntry = { id: number; msg: string; time: string }
+let _errSeq = 0
+
+function ErrorOverlay() {
+  const [errors, setErrors] = useState<ErrEntry[]>([])
+  const origRef = useRef<typeof console.error | null>(null)
+
+  useEffect(() => {
+    origRef.current = console.error
+    // eslint-disable-next-line no-console
+    console.error = (...args: unknown[]) => {
+      origRef.current?.(...args)
+      const msg = args.map(a =>
+        typeof a === 'string' ? a
+        : a instanceof Error ? `${a.name}: ${a.message}`
+        : JSON.stringify(a)
+      ).join(' ')
+      const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      setErrors(prev => [...prev.slice(-9), { id: ++_errSeq, msg, time }])
+    }
+
+    const onUnhandled = (e: PromiseRejectionEvent) => {
+      console.error('[unhandledRejection]', e.reason)
+    }
+    window.addEventListener('unhandledrejection', onUnhandled)
+
+    return () => {
+      // eslint-disable-next-line no-console
+      console.error = origRef.current!
+      window.removeEventListener('unhandledrejection', onUnhandled)
+    }
+  }, [])
+
+  if (errors.length === 0) return null
+
+  return (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, maxHeight: '40vh', overflowY: 'auto', background: 'rgba(20,0,0,0.92)', borderTop: '1px solid #7f1d1d', padding: '6px 10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ color: '#f87171', fontSize: 11, fontWeight: 700 }}>🐛 콘솔 에러 ({errors.length})</span>
+        <button onClick={() => setErrors([])} style={{ color: '#9ca3af', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer' }}>전체 지우기</button>
+      </div>
+      {errors.map(e => (
+        <div key={e.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 3 }}>
+          <span style={{ color: '#6b7280', fontSize: 10, flexShrink: 0, marginTop: 1 }}>{e.time}</span>
+          <span style={{ color: '#fca5a5', fontSize: 11, wordBreak: 'break-all', flex: 1 }}>{e.msg}</span>
+          <button onClick={() => setErrors(prev => prev.filter(x => x.id !== e.id))} style={{ color: '#6b7280', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export type AppScreen =
   | { screen: 'lobby' }
@@ -75,26 +128,30 @@ export default function App() {
 
   if (current.screen === 'game') {
     return (
-      <GamePage
-        roomCode={current.roomCode}
-        onLeave={() => go({ screen: 'lobby' })}
-      />
+      <>
+        <GamePage roomCode={current.roomCode} onLeave={() => go({ screen: 'lobby' })} />
+        <ErrorOverlay />
+      </>
     )
   }
 
   if (current.screen === 'waiting') {
     return (
-      <WaitingRoomPage
-        roomCode={current.roomCode}
-        onLeave={() => go({ screen: 'lobby' })}
-        onGameStart={() => go({ screen: 'game', roomCode: current.roomCode })}
-      />
+      <>
+        <WaitingRoomPage
+          roomCode={current.roomCode}
+          onLeave={() => go({ screen: 'lobby' })}
+          onGameStart={() => go({ screen: 'game', roomCode: current.roomCode })}
+        />
+        <ErrorOverlay />
+      </>
     )
   }
 
   return (
-    <LobbyPage
-      onEnterRoom={(roomCode) => go({ screen: 'waiting', roomCode })}
-    />
+    <>
+      <LobbyPage onEnterRoom={(roomCode) => go({ screen: 'waiting', roomCode })} />
+      <ErrorOverlay />
+    </>
   )
 }
