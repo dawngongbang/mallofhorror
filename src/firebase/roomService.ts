@@ -43,7 +43,6 @@ export async function createRoom(
     sealTime: settings.sealTime ?? DEFAULT_SETTINGS.sealTime,
     votingTime: settings.votingTime ?? DEFAULT_SETTINGS.votingTime,
     reactionTime: settings.reactionTime ?? DEFAULT_SETTINGS.reactionTime,
-    parkingMode: settings.parkingMode ?? DEFAULT_SETTINGS.parkingMode,
     voteReactionTiming: settings.voteReactionTiming ?? DEFAULT_SETTINGS.voteReactionTiming,
   }
 

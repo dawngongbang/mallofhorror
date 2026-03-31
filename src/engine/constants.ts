@@ -206,7 +206,6 @@ export const DEFAULT_SETTINGS = {
   sealTime: 60,
   votingTime: 60,
   reactionTime: 10,
-  parkingMode: 'normal' as const,
   voteReactionTiming: 'before_vote' as const,
 }
 

@@ -364,9 +364,6 @@ export interface GameSettings {
   sealTime: number          // 목적지 봉인 제한 시간 (초, 기본 60)
   votingTime: number        // 투표 제한 시간 (초, 기본 60)
   reactionTime: number      // 카드 반응 창 대기 시간 (초, 기본 10)
-  parkingMode: 'normal' | 'hardcore'
-  // normal:   주차장도 투표로 1명 사망
-  // hardcore: 주차장에서 좀비 수만큼 사망
   voteReactionTiming: 'before_vote' | 'after_vote' | 'disabled'
   // before_vote: 투표 시작 전 도망/숨기 가능 → 후보에서 제외
   // after_vote:  투표 결과 후 카드 사용 가능 → 사망 취소 + 재투표

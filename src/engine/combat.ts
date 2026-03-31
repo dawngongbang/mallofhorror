@@ -157,14 +157,6 @@ export function applyDeath(
   }
 }
 
-// ── 주차장 hardcore 모드 ──────────────────────────────────────
-
-// 주차장 hardcore: 좀비 수만큼 사망자 발생
-// 반환: 사망자 수
-export function getParkingHardcoreDeathCount(state: GameState): number {
-  return state.zones['parking'].zombies
-}
-
 // ── 유틸 ────────────────────────────────────────────────────
 
 function getAlivePlayers(state: GameState): string[] {
