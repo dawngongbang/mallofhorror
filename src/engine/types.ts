@@ -360,10 +360,11 @@ export interface CardReactionWindow {
 // ── 게임 설정 ────────────────────────────────────────────────
 
 export interface GameSettings {
-  playerCount: number       // 3~6
+  playerCount: number       // 3~6 (테스트 모드: 2~6)
   sealTime: number          // 목적지 봉인 제한 시간 (초, 기본 60)
   votingTime: number        // 투표 제한 시간 (초, 기본 60)
   reactionTime: number      // 카드 반응 창 대기 시간 (초, 기본 10)
+  isTestMode: boolean       // true: 2인도 시작 가능 (테스트 전용)
   voteReactionTiming: 'before_vote' | 'after_vote' | 'disabled'
   // before_vote: 투표 시작 전 도망/숨기 가능 → 후보에서 제외
   // after_vote:  투표 결과 후 카드 사용 가능 → 사망 취소 + 재투표

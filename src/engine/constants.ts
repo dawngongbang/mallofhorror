@@ -206,6 +206,7 @@ export const DEFAULT_SETTINGS = {
   sealTime: 60,
   votingTime: 60,
   reactionTime: 10,
+  isTestMode: false,
   voteReactionTiming: 'before_vote' as const,
 }
 

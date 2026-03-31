@@ -10,6 +10,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
   const [tab, setTab] = useState<'create' | 'join'>('create')
   const [nickname, setNickname] = useState('')
   const [joinCode, setJoinCode] = useState('')
+  const [isTestMode, setIsTestMode] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showRules, setShowRules] = useState(false)
@@ -18,7 +19,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
     if (!nickname.trim()) { setError('닉네임을 입력해주세요.'); return }
     setLoading(true); setError('')
     try {
-      const code = await createRoom(nickname.trim())
+      const code = await createRoom(nickname.trim(), { isTestMode })
       onEnterRoom(code)
     } catch (e: any) {
       setError(e.message)
@@ -93,6 +94,19 @@ export default function LobbyPage({ onEnterRoom }: Props) {
               className="w-full bg-zinc-800 text-white rounded-lg px-4 py-2.5 text-sm mb-4 outline-none focus:ring-2 focus:ring-red-500 placeholder:text-zinc-600 tracking-widest font-mono"
             />
           </>
+        )}
+
+        {/* 테스트 모드 (방 만들기 탭만) */}
+        {tab === 'create' && (
+          <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isTestMode}
+              onChange={e => setIsTestMode(e.target.checked)}
+              className="w-4 h-4 rounded accent-yellow-500"
+            />
+            <span className="text-xs text-zinc-500">테스트 모드 <span className="text-zinc-600">(2인 시작 허용)</span></span>
+          </label>
         )}
 
         {/* 에러 */}

@@ -55,8 +55,10 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const playerList = Object.values(players)
   const myPlayer = uid ? players[uid] : undefined
   const usedColors = playerList.map(p => p.color)
+  const isTestMode = meta?.settings.isTestMode ?? false
+  const minPlayers = isTestMode ? 2 : 3
   // 호스트는 준비 버튼이 없으므로 ready 체크에서 제외
-  const allReady = playerList.length >= 2 && playerList.every(p => p.isReady || p.id === meta?.hostId)  // TODO: 테스트용 2인, 배포 전 3으로 복원
+  const allReady = playerList.length >= minPlayers && playerList.every(p => p.isReady || p.id === meta?.hostId)
 
   async function handleColorChange(color: PlayerColor) {
     if (!roomCode) return
@@ -112,6 +114,9 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
         <div className="bg-zinc-900 rounded-2xl p-5 mb-4 text-center">
           <p className="text-xs text-zinc-500 mb-1">방 코드</p>
           <p className="text-4xl font-mono font-bold text-red-400 tracking-widest">{roomCode}</p>
+          {isTestMode && (
+            <p className="text-xs text-yellow-600 mt-2">⚠ 테스트 모드 — 2인 시작 가능</p>
+          )}
         </div>
 
         {/* 플레이어 목록 */}
