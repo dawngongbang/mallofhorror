@@ -342,16 +342,20 @@ export default function ActionPanel({
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap justify-center gap-2 mb-3 text-sm">
-            {Object.entries(roll.zombiesByZone).map(([zone, count]) => (
-              <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg">
-                <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
-                <span className="text-red-400 ml-1">+{count}🧟</span>
-              </span>
-            ))}
-          </div>
-          <p className="text-zinc-500 text-xs">보너스 좀비(사람/미녀 최다)는 이동 완료 후 결정됩니다</p>
-          <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
+          {!diceAnim && (
+            <>
+              <div className="flex flex-wrap justify-center gap-2 mb-3 text-sm">
+                {Object.entries(roll.zombiesByZone).map(([zone, count]) => (
+                  <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg">
+                    <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
+                    <span className="text-red-400 ml-1">+{count}🧟</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-zinc-500 text-xs">보너스 좀비(사람/미녀 최다)는 이동 완료 후 결정됩니다</p>
+              <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
+            </>
+          )}
           {zombieSelectorDR}
         </div>
       )
