@@ -32,6 +32,7 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
   const [startError, setStartError] = useState('')
   const [starting, setStarting] = useState(false)
   const [showRules, setShowRules] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const uid = getCurrentUid()
 
   useEffect(() => {
@@ -112,8 +113,17 @@ export default function WaitingRoomPage({ roomCode, onLeave, onGameStart }: Prop
 
         {/* 방 코드 */}
         <div className="bg-zinc-900 rounded-2xl p-5 mb-4 text-center">
-          <p className="text-xs text-zinc-500 mb-1">방 코드</p>
-          <p className="text-4xl font-mono font-bold text-red-400 tracking-widest">{roomCode}</p>
+          <p className="text-xs text-zinc-500 mb-1">방 코드 <span className="text-zinc-700">· 눌러서 복사</span></p>
+          <p
+            onClick={() => {
+              navigator.clipboard.writeText(roomCode)
+              setCodeCopied(true)
+              setTimeout(() => setCodeCopied(false), 2000)
+            }}
+            className={`text-4xl font-mono font-bold tracking-widest cursor-pointer transition-colors select-all ${codeCopied ? 'text-green-400' : 'text-red-400 hover:text-red-300'}`}
+          >
+            {codeCopied ? '복사됨!' : roomCode}
+          </p>
           {isTestMode && (
             <p className="text-xs text-yellow-600 mt-2">⚠ 테스트 모드 — 2인 시작 가능</p>
           )}
