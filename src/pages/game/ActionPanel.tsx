@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  declareCharacter,
-  selectDestination,
-  confirmDestination,
   selectVote,
   confirmVote,
   patchGameState,
@@ -49,11 +46,8 @@ interface ActionPanelProps {
   setStagedHardwareItemId: (id: string | null) => void
   // Hover state (shared with ZoneBoard via GamePage)
   hoveredCharId: string | null
-  setHoveredCharId: (id: string | null) => void
-  // Additional state needed for setup_place and destination_seal panels
+  // Additional state needed for setup_place panel
   selectedSetupCharId: string | null
-  hoveredZone: ZoneName | null
-  setHoveredZone: (z: ZoneName | null) => void
   onLeave: () => void
   myItemIds: string[]
 }
@@ -77,10 +71,7 @@ export default function ActionPanel({
   stagedSprintTargetZone,
   setStagedSprintTargetZone,
   stagedHardwareItemId,
-  setHoveredCharId,
   selectedSetupCharId,
-  hoveredZone,
-  setHoveredZone,
   onLeave,
   myItemIds,
 }: ActionPanelProps) {
@@ -146,9 +137,6 @@ export default function ActionPanel({
   })()
 
   const myDeclaredCharId = game.characterDeclarations[uid ?? '']?.characterId
-  const myAliveChars = uid
-    ? Object.values(game.characters).filter(c => c.playerId === uid && c.isAlive)
-    : []
   const currentDeclarerId = game?.declarationOrder.find(pid => !game.characterDeclarations[pid]) ?? null
   const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone
   const myDestConfirmed = !!(uid && game.destinationStatus[uid])
@@ -172,34 +160,6 @@ export default function ActionPanel({
     if (!game || actionLoading) return
     setActionLoading(true)
     try { await submitSheriffRollRequest(roomCode) }
-    finally { setActionLoading(false) }
-  }
-
-  async function handleDeclareCharacter(charInstanceId: string) {
-    if (!uid || myDeclaredCharId || actionLoading) return
-    if (currentDeclarerId !== uid) return
-    setActionLoading(true)
-    try {
-      await declareCharacter(roomCode, {
-        playerId: uid,
-        characterId: charInstanceId,
-        order: game!.declarationOrder.indexOf(uid),
-        declaredAt: Date.now(),
-      })
-    } finally { setActionLoading(false) }
-  }
-
-  async function handleSelectDestination(zone: ZoneName) {
-    if (!uid || myDestConfirmed || actionLoading) return
-    setActionLoading(true)
-    try { await selectDestination(roomCode, zone) }
-    finally { setActionLoading(false) }
-  }
-
-  async function handleConfirmDestination() {
-    if (!uid || !mySealedZone || myDestConfirmed || actionLoading) return
-    setActionLoading(true)
-    try { await confirmDestination(roomCode) }
     finally { setActionLoading(false) }
   }
 
@@ -490,25 +450,7 @@ export default function ActionPanel({
           )}
 
           {!myDeclaredCharId && currentDeclarerId === uid && (
-            <div>
-              <p className="text-white text-sm font-bold mb-2">내 차례 — 이동할 캐릭터 선택</p>
-              <div className="flex gap-2 flex-wrap">
-                {myAliveChars.map(char => {
-                  const charConfig = CHARACTER_CONFIGS[char.characterId]
-                  return (
-                    <button key={char.id}
-                      onClick={() => handleDeclareCharacter(char.id)}
-                      onMouseEnter={() => setHoveredCharId(char.id)}
-                      onMouseLeave={() => setHoveredCharId(null)}
-                      disabled={actionLoading}
-                      className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white text-sm px-4 py-2 rounded-xl transition-colors">
-                      {charConfig?.name ?? char.characterId}
-                      <span className="text-zinc-400 text-xs ml-1">({ZONE_CONFIGS[char.zone].displayName})</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <p className="text-yellow-400 text-sm font-bold">손패에서 이동할 캐릭터를 선택하세요</p>
           )}
 
           {!myDeclaredCharId && currentDeclarerId !== uid && (
@@ -541,37 +483,7 @@ export default function ActionPanel({
           {myDestConfirmed ? (
             <p className="text-green-400 text-sm font-bold">✓ 확정 완료 — {mySealedZone ? ZONE_CONFIGS[mySealedZone].displayName : '이동 없음'}</p>
           ) : (
-            <>
-              <div className="flex gap-2 flex-wrap mb-3">
-                {ZONE_ORDER.filter(z => z !== myMovingCharData?.zone && !game!.zones[z].isClosed).map(zone => (
-                  <button key={zone}
-                    onClick={() => handleSelectDestination(zone)}
-                    onMouseEnter={() => setHoveredZone(zone)}
-                    onMouseLeave={() => setHoveredZone(null)}
-                    disabled={actionLoading}
-                    className={`text-white text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                      mySealedZone === zone
-                        ? 'bg-blue-600 ring-2 ring-blue-400'
-                        : hoveredZone === zone
-                        ? 'bg-blue-700'
-                        : 'bg-zinc-700 hover:bg-blue-700'
-                    }`}>
-                    {ZONE_CONFIGS[zone].displayName}
-                  </button>
-                ))}
-              </div>
-              {mySealedZone ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-400 text-xs">선택: <span className="text-yellow-300 font-medium">{ZONE_CONFIGS[mySealedZone].displayName}</span></span>
-                  <button onClick={handleConfirmDestination} disabled={actionLoading}
-                    className="bg-green-600 hover:bg-green-500 disabled:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
-                    확정
-                  </button>
-                </div>
-              ) : (
-                <p className="text-zinc-600 text-xs">구역을 선택하세요</p>
-              )}
-            </>
+            <p className="text-yellow-400 text-sm">맵에서 이동할 구역을 선택하세요</p>
           )}
           <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {total}명 확정</p>
         </div>

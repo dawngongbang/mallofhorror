@@ -27,6 +27,7 @@ interface ZoneBoardProps {
   setActionLoading: (v: boolean) => void
   pendingSetupFromPos: React.MutableRefObject<{ charId: string; pos: { x: number; y: number } } | null>
   getHandCardPos: (cardIndex: number, totalCards: number) => { x: number; y: number }
+  onDestinationPreSelect?: (zone: ZoneName) => void
 }
 
 export default function ZoneBoard({
@@ -44,6 +45,7 @@ export default function ZoneBoard({
   setActionLoading,
   pendingSetupFromPos,
   getHandCardPos,
+  onDestinationPreSelect,
 }: ZoneBoardProps) {
   // Derived values
   const myUnplacedChars = uid
@@ -167,7 +169,7 @@ export default function ZoneBoard({
         key={zoneName}
         style={{ left: pos.left, top: pos.top, width: pos.width ?? '29%' }}
         onClick={
-          isDestSelectable ? () => handleSelectDestination(zoneName)
+          isDestSelectable ? () => onDestinationPreSelect ? onDestinationPreSelect(zoneName) : handleSelectDestination(zoneName)
           : isSetupPlaceable ? () => handlePlaceCharacter(selectedSetupCharId!, zoneName)
           : undefined
         }

@@ -4,6 +4,7 @@ import {
   subscribeToMyItems,
   useThreatItem, useCctvItem,
   declareCharacter, submitVictimChoice,
+  selectDestination, confirmDestination,
 } from '../firebase/gameService'
 import { subscribeToPlayers, subscribeToMeta } from '../firebase/roomService'
 import { getCurrentUid } from '../firebase/auth'
@@ -53,6 +54,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [showRules, setShowRules] = useState(false)
   const [hoveredCharId, setHoveredCharId] = useState<string | null>(null)
   const [hoveredZone, setHoveredZone] = useState<ZoneName | null>(null)
+  const [pendingConfirm, setPendingConfirm] = useState<
+    | { type: 'char'; charId: string }
+    | { type: 'dest'; zone: ZoneName }
+    | null
+  >(null)
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -482,6 +488,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               setActionLoading={setActionLoading}
               pendingSetupFromPos={pendingSetupFromPos}
               getHandCardPos={getHandCardPos}
+              onDestinationPreSelect={(zone) => setPendingConfirm({ type: 'dest', zone })}
             />
             {/* 이동 애니메이션 토큰 */}
             {movingTokens.map(t => {
@@ -541,18 +548,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   let onClick: (() => void) | undefined
                   if (canDeclare) {
                     isClickable = true
-                    onClick = async () => {
-                      if (!uid || myDeclaredCharId || actionLoading || currentDeclarerId !== uid) return
-                      setActionLoading(true)
-                      try {
-                        await declareCharacter(roomCode, {
-                          playerId: uid,
-                          characterId: char.id,
-                          order: game!.declarationOrder.indexOf(uid),
-                          declaredAt: Date.now(),
-                        })
-                      } finally { setActionLoading(false) }
-                    }
+                    onClick = () => setPendingConfirm({ type: 'char', charId: char.id })
                   } else if (isVictimMode && !actionLoading) {
                     isClickable = true
                     onClick = async () => {
@@ -749,10 +745,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               stagedHardwareItemId={stagedHardwareItemId}
               setStagedHardwareItemId={setStagedHardwareItemId}
               hoveredCharId={hoveredCharId}
-              setHoveredCharId={setHoveredCharId}
               selectedSetupCharId={selectedSetupCharId}
-              hoveredZone={hoveredZone}
-              setHoveredZone={setHoveredZone}
               onLeave={onLeave}
               myItemIds={myItemIds}
             />
@@ -766,6 +759,63 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       </div>
     </div>
     {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+
+    {/* ── 이동 확정 팝업 ── */}
+    {pendingConfirm && game && (() => {
+      let message = ''
+      if (pendingConfirm.type === 'char') {
+        const char = game.characters[pendingConfirm.charId]
+        const cfg = CHARACTER_CONFIGS[char?.characterId ?? '']
+        const name = cfg?.name ?? '?'
+        const zoneName = char ? ZONE_CONFIGS[char.zone].displayName : '?'
+        message = `${name}을(를) 이동 캐릭터로 선택하시겠습니까?`
+        void zoneName
+      } else {
+        const myMovingCharId = game.characterDeclarations[uid ?? '']?.characterId
+        const myMovingChar = myMovingCharId ? game.characters[myMovingCharId] : null
+        const cfg = myMovingChar ? CHARACTER_CONFIGS[myMovingChar.characterId] : null
+        const name = cfg?.name ?? '?'
+        const destName = ZONE_CONFIGS[pendingConfirm.zone].displayName
+        message = `${name}을(를) ${destName}(으)로 이동하시겠습니까?`
+      }
+
+      async function confirm() {
+        if (actionLoading) return
+        setActionLoading(true)
+        try {
+          if (pendingConfirm!.type === 'char') {
+            await declareCharacter(roomCode, {
+              playerId: uid!,
+              characterId: pendingConfirm!.charId,
+              order: game!.declarationOrder.indexOf(uid!),
+              declaredAt: Date.now(),
+            })
+          } else {
+            await selectDestination(roomCode, pendingConfirm!.zone)
+            await confirmDestination(roomCode)
+          }
+        } finally {
+          setActionLoading(false)
+          setPendingConfirm(null)
+        }
+      }
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setPendingConfirm(null)}>
+          <div className="bg-zinc-900 rounded-2xl p-6 mx-4 max-w-sm w-full shadow-2xl border border-zinc-700" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-sm font-semibold text-center leading-relaxed">{message}</p>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setPendingConfirm(null)} className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors">
+                취소
+              </button>
+              <button onClick={confirm} disabled={actionLoading} className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold transition-colors">
+                확정
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    })()}
     </>
   )
 }
