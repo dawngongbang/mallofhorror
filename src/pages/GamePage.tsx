@@ -59,6 +59,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     | { type: 'dest'; zone: ZoneName }
     | null
   >(null)
+  // 초기 배치 주사위 애니메이션 완료 여부 (상단 바 구역 힌트 노출 제어)
+  const [setupDiceTopReady, setSetupDiceTopReady] = useState(false)
+  const lastSetupDiceTopKey = useRef('')
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -137,6 +140,17 @@ export default function GamePage({ roomCode, onLeave }: Props) {
       }, totalDuration + 200)
     }
   }, [game?.characters])
+
+  // ── 초기 배치 주사위 상단 바 구역 힌트 — 애니메이션 완료 후 표시 ──
+  useEffect(() => {
+    if (!game?.setupDiceRoll) { setSetupDiceTopReady(false); return }
+    const key = (game.setupDiceRoll as [number, number]).join(',')
+    if (lastSetupDiceTopKey.current === key) return
+    lastSetupDiceTopKey.current = key
+    setSetupDiceTopReady(false)
+    const timer = setTimeout(() => setSetupDiceTopReady(true), 1100) // 애니메이션 ~12틱×80ms=960ms
+    return () => clearTimeout(timer)
+  }, [game?.setupDiceRoll])
 
   // ── weapon_use 페이즈 이탈 시 staged 초기화 ───────────────────
   useEffect(() => {
@@ -420,9 +434,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                         <span key={i} className="w-6 h-6 bg-zinc-700 rounded text-sm font-bold text-white flex items-center justify-center">{v}</span>
                       ))}
                     </div>
-                    <span className="text-yellow-400 text-xs font-semibold">
-                      → {zoneOptions.map(z => ZONE_CONFIGS[z]?.displayName).join(' 또는 ')}
-                    </span>
+                    {setupDiceTopReady && (
+                      <span className="text-yellow-400 text-xs font-semibold">
+                        → {zoneOptions.map(z => ZONE_CONFIGS[z]?.displayName).join(' 또는 ')}
+                      </span>
+                    )}
                     {currentOwner && (
                       <span className="text-zinc-500 text-xs">({currentOwner.nickname}님 배치 중)</span>
                     )}

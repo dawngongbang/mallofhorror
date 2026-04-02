@@ -68,6 +68,15 @@ export default function ZoneBoard({
 
   const isMyTurnToPlace = game.setupPlacementOrder[0] === uid
   const myDeclaredCharId = game.characterDeclarations[uid ?? '']?.characterId
+
+  // 좀비 주사위 결과 표시 가능 여부 (정식보안관 or CCTV 사용자)
+  const sheriffId = game.playerOrder[game.sheriffIndex]
+  const canSeeDice = !!game.lastDiceRoll && (
+    (uid === sheriffId && game.isRealSheriff) ||
+    (uid ? game.cctvViewers.includes(uid) : false)
+  )
+  const incomingZombies: Partial<Record<ZoneName, number>> =
+    canSeeDice && game.lastDiceRoll ? game.lastDiceRoll.zombiesByZone as Partial<Record<ZoneName, number>> : {}
   const currentDeclarerId = game?.declarationOrder.find(pid => !game.characterDeclarations[pid]) ?? null
   const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone
   const myDestConfirmed = !!(uid && game.destinationStatus[uid])
@@ -194,9 +203,16 @@ export default function ZoneBoard({
             <span className="text-zinc-400 mr-0.5">{config.zoneNumber}</span>{config.displayName}
             {zoneState.isClosed && <span className="ml-1 text-red-600 no-underline not-italic">🔒</span>}
           </span>
-          {phaseBadge && (
-            <span className={`px-1 py-0.5 rounded text-[10px] font-bold shrink-0 ${phaseBadge.cls}`}>{phaseBadge.label}</span>
-          )}
+          <div className="flex items-center gap-0.5 shrink-0">
+            {incomingZombies[zoneName] != null && (
+              <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-yellow-900/80 text-yellow-300 border border-yellow-700/60">
+                +{incomingZombies[zoneName]}🧟
+              </span>
+            )}
+            {phaseBadge && (
+              <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${phaseBadge.cls}`}>{phaseBadge.label}</span>
+            )}
+          </div>
         </div>
 
         {/* 좀비 아이콘 */}
