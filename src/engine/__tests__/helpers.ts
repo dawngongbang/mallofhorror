@@ -17,6 +17,7 @@ export function createTestState(): GameState {
     sheriffIndex: 0,
     isRealSheriff: false,
     nextSheriffPlayerId: null,
+    securityOccupantsAtRoundStart: [],
     characters: {
       p1_belle:    { id: 'p1_belle',    playerId: 'p1', characterId: 'belle',    zone: 'corridor' as ZoneName, isAlive: true },
       p1_toughguy: { id: 'p1_toughguy', playerId: 'p1', characterId: 'toughguy', zone: 'corridor' as ZoneName, isAlive: true },

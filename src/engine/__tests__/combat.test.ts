@@ -163,17 +163,26 @@ describe('calculateVoteResult', () => {
 import { checkRealSheriff, resolveNextSheriff } from '../phase'
 
 describe('checkRealSheriff', () => {
-  it('보안관이 보안실에 캐릭터 보유 → 진짜 보안관', () => {
+  it('라운드 시작 시 보안관이 보안실 점유 → 진짜 보안관', () => {
     const state = createTestState()
-    // sheriffIndex=0 → p1이 보안관
-    addCharacterToZone(state, 'p1_belle', 'security')
+    // sheriffIndex=0 → p1이 보안관, 라운드 시작 시 보안실 점유자 스냅샷에 포함
+    state.securityOccupantsAtRoundStart = ['p1']
 
     expect(checkRealSheriff(state)).toBe(true)
   })
 
-  it('보안관이 보안실에 캐릭터 없음 → 임시 보안관', () => {
+  it('라운드 시작 시 다른 플레이어만 보안실 점유 → 임시 보안관', () => {
     const state = createTestState()
-    addCharacterToZone(state, 'p2_belle', 'security')  // p2 캐릭터만 있음
+    state.securityOccupantsAtRoundStart = ['p2']  // p2만 있음
+
+    expect(checkRealSheriff(state)).toBe(false)
+  })
+
+  it('라운드 도중 보안실로 이동 (스냅샷 미포함) → 임시 보안관', () => {
+    const state = createTestState()
+    // 이동 페이즈 후 보안실에 캐릭터 있지만, 라운드 시작 스냅샷에는 없음
+    addCharacterToZone(state, 'p1_belle', 'security')
+    // securityOccupantsAtRoundStart는 [] (기본값)
 
     expect(checkRealSheriff(state)).toBe(false)
   })

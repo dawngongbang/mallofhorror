@@ -95,8 +95,17 @@ export function initRoundState(state: GameState): GameState {
   ].filter(pid =>
     Object.values(state.characters).some(c => c.playerId === pid && c.isAlive)
   )
+  // 이번 라운드 시작 시 보안실 점유자 스냅샷 (real sheriff 판단 기준)
+  const securityOccupantsAtRoundStart = [
+    ...new Set(
+      state.zones.security.characterIds
+        .filter(id => state.characters[id]?.isAlive)
+        .map(id => state.characters[id].playerId)
+    ),
+  ]
   return {
     ...state,
+    securityOccupantsAtRoundStart,
     characterDeclarations: {},
     declarationOrder: sheriffFirst,
     sealedDestinations: {},
@@ -135,15 +144,13 @@ export function getSheriffPlayerId(state: GameState): string {
   return state.playerOrder[state.sheriffIndex]
 }
 
-// 보안관이 현재 보안실에 캐릭터를 보유 중인지 확인
+// 보안관이 라운드 시작 시 보안실에 캐릭터를 보유하고 있었는지 확인
 // → true면 진짜 보안관 (주사위 비공개 가능)
 // → false면 임시 보안관 (주사위 항상 공개)
+// 이동 페이즈로 보안실에 들어온 경우는 해당 라운드에서는 임시보안관으로 취급
 export function checkRealSheriff(state: GameState): boolean {
   const sheriffId = getSheriffPlayerId(state)
-  return state.zones.security.characterIds.some(charId => {
-    const char = state.characters[charId]
-    return char?.isAlive && char.playerId === sheriffId
-  })
+  return (state.securityOccupantsAtRoundStart ?? []).includes(sheriffId)
 }
 
 // 라운드 시작 시 진짜/임시 보안관 여부 갱신

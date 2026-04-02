@@ -59,6 +59,7 @@ export function createInitialGameState(
     sheriffIndex,
     isRealSheriff: false,  // 초기에는 임시 보안관
     nextSheriffPlayerId: null,
+    securityOccupantsAtRoundStart: [],  // 게임 시작 시는 보안실 비어있음
 
     characters,
     zones,
@@ -204,6 +205,14 @@ export function startFirstRound(state: GameState): GameState {
     ...state.playerOrder.slice(state.sheriffIndex),
     ...state.playerOrder.slice(0, state.sheriffIndex),
   ]
+  // 첫 라운드 시작 시 보안실 점유자 스냅샷
+  const securityOccupantsAtRoundStart = [
+    ...new Set(
+      state.zones.security.characterIds
+        .filter(id => state.characters[id]?.isAlive)
+        .map(id => state.characters[id].playerId)
+    ),
+  ]
   return {
     ...state,
     phase: 'dice_reveal',
@@ -211,5 +220,6 @@ export function startFirstRound(state: GameState): GameState {
     lastDiceRoll: roll,
     declarationOrder: sheriffFirst,
     currentEventZoneIndex: 0,
+    securityOccupantsAtRoundStart,
   }
 }

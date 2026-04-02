@@ -193,6 +193,7 @@ export interface GameState {
   sheriffIndex: number        // playerOrder에서 현재 보안관 인덱스
   isRealSheriff: boolean      // true: 진짜 보안관(주사위 비공개 가능), false: 임시 보안관(항상 공개)
   nextSheriffPlayerId: string | null  // 보안실 투표로 결정된 다음 보안관
+  securityOccupantsAtRoundStart: string[]  // 라운드 시작 시 보안실에 있던 플레이어 ID (real sheriff 판단 기준)
 
   // 보드
   characters: Record<string, Character>   // instanceId → Character

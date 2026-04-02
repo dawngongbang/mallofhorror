@@ -96,6 +96,7 @@ describe('determineSurvivorEvent', () => {
     const state = createTestState()
     addCharacterToZone(state, 'p1_belle', 'parking')
     state.zones.parking.zombies = 0
+    state.itemDeck = [{ instanceId: 'test_0', itemId: 'security_camera' as import('../types').ItemId }]
 
     expect(determineSurvivorEvent('parking', state)).toBe('truck_search')
   })
@@ -149,6 +150,7 @@ describe('startZoneSurvivorPhase', () => {
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
     state.zones.parking.zombies = 0
+    state.itemDeck = [{ instanceId: 'test_0', itemId: 'security_camera' as import('../types').ItemId }]
 
     const result = startZoneSurvivorPhase('parking', state)
     expect(result).not.toBeNull()
@@ -192,6 +194,7 @@ describe('2단계 흐름', () => {
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
     state.zones.parking.zombies = 0
+    state.itemDeck = [{ instanceId: 'test_0', itemId: 'security_camera' as import('../types').ItemId }]
 
     expect(startZoneAttackPhase('parking', state)).toBeNull()
 
@@ -204,6 +207,7 @@ describe('2단계 흐름', () => {
     addCharacterToZone(state, 'p1_belle', 'parking')
     addCharacterToZone(state, 'p2_belle', 'parking')
     state.zones.parking.zombies = 1  // 주차장은 1마리도 공격
+    state.itemDeck = [{ instanceId: 'test_0', itemId: 'security_camera' as import('../types').ItemId }]
 
     const attackState = startZoneAttackPhase('parking', state)
     expect(attackState).not.toBeNull()
