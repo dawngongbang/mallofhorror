@@ -141,6 +141,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     }
   }, [game?.characters])
 
+  // ── 초기 배치 차례 변경 시 캐릭터 선택 초기화 ───────────────────
+  useEffect(() => {
+    setSelectedSetupCharId(null)
+  }, [game?.setupPlacementOrder?.[0]])
+
   // ── 초기 배치 주사위 상단 바 구역 힌트 — 애니메이션 완료 후 표시 ──
   useEffect(() => {
     if (!game?.setupDiceRoll) { setSetupDiceTopReady(false); return }
