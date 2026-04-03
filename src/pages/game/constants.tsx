@@ -63,7 +63,7 @@ export function getPlayerSpawnPos(playerIndex: number, totalPlayers: number): { 
 export function getHandCardPos(cardIndex: number, totalCards: number): { x: number; y: number } {
   const spacing = Math.min(22, 55 / Math.max(1, totalCards - 1))
   const x = 50 + (cardIndex - (totalCards - 1) / 2) * spacing
-  return { x, y: 88 }
+  return { x, y: 108 }
 }
 
 export interface MovingTokenState {

@@ -499,7 +499,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           </div>
 
           {/* 맵 보드 */}
-          <div className="relative w-full max-w-2xl mx-auto aspect-square overflow-visible mb-10">
+          <div className="relative w-full max-w-2xl mx-auto aspect-square overflow-visible mb-24">
             <img
               src={`${import.meta.env.BASE_URL}map.jpg`}
               alt="몰오브호러 맵"
@@ -601,7 +601,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                       onMouseEnter={() => setHoveredCharId(char.id)}
                       onMouseLeave={() => setHoveredCharId(null)}
                       style={{
-                        position: 'absolute', left: `${pos.x}%`, top: '100%',
+                        position: 'absolute', left: `${pos.x}%`, top: '108%',
                         transform: `translate(-50%, -50%)${isHighlighted || isHovered ? ' translateY(-10px) scale(1.1)' : ''}`,
                         transition: 'transform 0.18s ease',
                         zIndex: 40,
@@ -640,7 +640,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                     <div key={char.id}
                       onClick={() => { if (!isPlacing && !actionLoading && !isZoneSelectActive) setSelectedSetupCharId(isSelected ? null : char.id) }}
                       style={{
-                        position: 'absolute', left: `${pos.x}%`, top: '100%',
+                        position: 'absolute', left: `${pos.x}%`, top: '108%',
                         transform: `translate(-50%, -50%)${isSelected ? ' translateY(-12px) scale(1.12)' : ''}`,
                         transition: 'transform 0.18s ease, opacity 0.15s ease',
                         opacity: isPlacing ? 0 : (!isSelected && isZoneSelectActive) ? 0.35 : 1,
@@ -692,7 +692,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   if (isConfirming) {
                     return (
                       <div key={instanceId}
-                        style={{ position: 'absolute', left: `${pos.x}%`, top: '100%', transform: 'translate(-50%, -50%)', zIndex: 50 }}
+                        style={{ position: 'absolute', left: `${pos.x}%`, top: '108%', transform: 'translate(-50%, -50%)', zIndex: 50 }}
                         className="rounded-2xl shadow-2xl flex flex-col items-center justify-center gap-1 bg-yellow-800 border-2 border-yellow-400 p-2 select-none"
                       >
                         <span className="text-xl leading-none">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
@@ -718,7 +718,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                         if (isUsable) setConfirmingItems(prev => new Set(prev).add(instanceId))
                       }}
                       style={{
-                        position: 'absolute', left: `${pos.x}%`, top: '100%',
+                        position: 'absolute', left: `${pos.x}%`, top: '108%',
                         transform: 'translate(-50%, -50%)',
                         transition: 'transform 0.18s ease', zIndex: 40,
                       }}
