@@ -87,6 +87,8 @@ export default function ZoneBoard({
 
   async function handlePlaceCharacter(charInstanceId: string, zone: ZoneName) {
     if (!game || !charInstanceId || actionLoading) return
+    // 이미 배치된 캐릭터(parking 아닌 구역)는 재배치 불가
+    if (game.characters[charInstanceId]?.zone !== 'parking') return
     setActionLoading(true)
     const cardIndex = myUnplacedChars.findIndex(c => c.id === charInstanceId)
     if (cardIndex >= 0) {
@@ -163,17 +165,19 @@ export default function ZoneBoard({
     const isSelectedDest = game!.phase === 'destination_seal' && mySealedZone === zoneName
     const isHoveredDest = hoveredZone === zoneName && isDestSelectable
 
+    const selectedIsUnplaced = !!selectedSetupCharId
+      && game!.characters[selectedSetupCharId]?.zone === 'parking'
     const isSetupPlaceable = game!.phase === 'setup_place'
       && isMyTurnToPlace
       && !!game!.setupDiceRoll
       && setupDiceTopReady
-      && !!selectedSetupCharId
+      && selectedIsUnplaced
       && setupZoneOptions.includes(zoneName)
     const isSetupInvalid = game!.phase === 'setup_place'
       && isMyTurnToPlace
       && !!game!.setupDiceRoll
       && setupDiceTopReady
-      && !!selectedSetupCharId
+      && selectedIsUnplaced
       && !setupZoneOptions.includes(zoneName)
     const isHoveredSetup = hoveredZone === zoneName && isSetupPlaceable
 

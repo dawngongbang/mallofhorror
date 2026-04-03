@@ -146,6 +146,13 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     setSelectedSetupCharId(null)
   }, [game?.setupPlacementOrder?.[0]])
 
+  // ── selectedSetupCharId가 이미 배치된 캐릭터면 자동 초기화 ──────
+  useEffect(() => {
+    if (selectedSetupCharId && game?.characters[selectedSetupCharId]?.zone !== 'parking') {
+      setSelectedSetupCharId(null)
+    }
+  }, [selectedSetupCharId, game?.characters])
+
   // ── 초기 배치 주사위 상단 바 구역 힌트 — 애니메이션 완료 후 표시 ──
   useEffect(() => {
     if (!game?.setupDiceRoll) { setSetupDiceTopReady(false); return }
