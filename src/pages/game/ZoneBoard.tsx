@@ -256,7 +256,10 @@ export default function ZoneBoard({
               <div
                 key={char.id}
                 title={`${owner?.nickname ?? '?'} — ${charConfig?.name}${isHidden ? ' (숨음)' : ''}`}
-                onClick={isClickableChar ? (e) => { e.stopPropagation(); handleDeclareCharacter(char.id) } : undefined}
+                onClick={isClickableChar
+                  ? (e) => { e.stopPropagation(); handleDeclareCharacter(char.id) }
+                  : (e) => e.stopPropagation()
+                }
                 onMouseEnter={isClickableChar ? () => setHoveredCharId(char.id) : undefined}
                 onMouseLeave={isClickableChar ? () => setHoveredCharId(null) : undefined}
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-all

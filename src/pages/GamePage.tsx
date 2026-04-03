@@ -626,18 +626,23 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                   const cfg = CHARACTER_CONFIGS[char.characterId]
                   const isSelected = selectedSetupCharId === char.id
                   const isPlacing = transitCharIds.has(char.id)
+                  // 구역 선택 단계(setupDiceTopReady + 캐릭터 선택됨)에서는
+                  // 모든 카드를 잠가 캐릭터 선택 변경 불가
+                  const isZoneSelectActive = setupDiceTopReady && !!selectedSetupCharId
                   return (
                     <div key={char.id}
-                      onClick={() => { if (!isPlacing && !actionLoading) setSelectedSetupCharId(isSelected ? null : char.id) }}
+                      onClick={() => { if (!isPlacing && !actionLoading && !isZoneSelectActive) setSelectedSetupCharId(isSelected ? null : char.id) }}
                       style={{
                         position: 'absolute', left: `${pos.x}%`, top: '100%',
                         transform: `translate(-50%, -50%)${isSelected ? ' translateY(-12px) scale(1.12)' : ''}`,
                         transition: 'transform 0.18s ease, opacity 0.15s ease',
-                        opacity: isPlacing ? 0 : 1, zIndex: 40,
+                        opacity: isPlacing ? 0 : (!isSelected && isZoneSelectActive) ? 0.35 : 1,
+                        zIndex: isZoneSelectActive ? 5 : 40,
+                        pointerEvents: isZoneSelectActive ? 'none' : 'auto',
                       }}
-                      className={`cursor-pointer rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
+                      className={`rounded-2xl shadow-2xl flex flex-col items-center justify-center w-14 h-16 select-none
                         ${isSelected ? 'bg-yellow-600 ring-2 ring-yellow-300' : 'bg-zinc-800/90 border border-zinc-500 hover:border-zinc-300 hover:bg-zinc-700/90'}
-                        ${actionLoading ? 'pointer-events-none' : ''}`}
+                        ${(!isZoneSelectActive && !actionLoading) ? 'cursor-pointer' : ''}`}
                     >
                       <span className="text-2xl leading-none">{CHAR_ICON[char.characterId] ?? '?'}</span>
                       <span className="text-xs mt-0.5 font-medium text-white leading-tight">{cfg?.name}</span>
