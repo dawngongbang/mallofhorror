@@ -509,6 +509,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               hoveredCharId={hoveredCharId}
               setHoveredCharId={setHoveredCharId}
               selectedSetupCharId={selectedSetupCharId}
+              setupDiceTopReady={setupDiceTopReady}
               actionLoading={actionLoading}
               setActionLoading={setActionLoading}
               pendingSetupFromPos={pendingSetupFromPos}
