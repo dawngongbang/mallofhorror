@@ -48,6 +48,7 @@ interface ActionPanelProps {
   hoveredCharId: string | null
   // Additional state needed for setup_place panel
   selectedSetupCharId: string | null
+  setupDiceTopReady: boolean
   onLeave: () => void
   myItemIds: string[]
 }
@@ -72,6 +73,7 @@ export default function ActionPanel({
   setStagedSprintTargetZone,
   stagedHardwareItemId,
   selectedSetupCharId,
+  setupDiceTopReady,
   onLeave,
   myItemIds,
 }: ActionPanelProps) {
@@ -85,7 +87,7 @@ export default function ActionPanel({
   const lastDiceKey = useRef('')
 
   useEffect(() => {
-    if (game?.phase !== 'dice_reveal' || !game.lastDiceRoll || uid !== game.playerOrder[game.sheriffIndex] || !game.isRealSheriff) return
+    if (game?.phase !== 'dice_reveal' || !game.lastDiceRoll || uid !== game.playerOrder[game.sheriffIndex]) return
     const key = game.lastDiceRoll.dice.join(',')
     if (lastDiceKey.current === key) return
     lastDiceKey.current = key
@@ -238,16 +240,20 @@ export default function ActionPanel({
               <span className="text-white font-bold">{currentOwner?.nickname}</span>님이 캐릭터 배치 중...
             </p>
             {d ? (
-              <>
-                <div className="flex justify-center gap-2 mb-1">
-                  {d.map((v, i) => (
-                    <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">{v}</div>
-                  ))}
-                </div>
-                <p className="text-yellow-400 text-xs font-semibold">
-                  → {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
-                </p>
-              </>
+              setupDiceTopReady ? (
+                <>
+                  <div className="flex justify-center gap-2 mb-1">
+                    {d.map((v, i) => (
+                      <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">{v}</div>
+                    ))}
+                  </div>
+                  <p className="text-yellow-400 text-xs font-semibold">
+                    → {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
+                  </p>
+                </>
+              ) : (
+                <p className="text-zinc-500 text-xs animate-pulse">굴리는 중...</p>
+              )
             ) : (
               <p className="text-zinc-600 text-xs">주사위 대기 중...</p>
             )}
@@ -274,11 +280,15 @@ export default function ActionPanel({
       const showSetupResult = !setupDiceAnim && !isNewSetupDice
       return (
         <div className="text-center">
-          <div className="flex justify-center gap-3 mb-2">
-            {(displayD as [number, number]).map((v, i) => (
-              <div key={`${i}-${v}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white">{v}</div>
-            ))}
-          </div>
+          {isNewSetupDice && !setupDiceAnim ? (
+            <p className="text-zinc-500 text-xs animate-pulse mb-2">굴리는 중...</p>
+          ) : (
+            <div className="flex justify-center gap-3 mb-2">
+              {(displayD as [number, number]).map((v, i) => (
+                <div key={`${i}-${v}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white">{v}</div>
+              ))}
+            </div>
+          )}
           {showSetupResult && (
             <>
               <p className="text-yellow-400 text-sm font-bold mb-1">

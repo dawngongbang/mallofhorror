@@ -429,15 +429,19 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 return (
                   <div className="w-full bg-zinc-800 border border-blue-900 rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap">
                     <span className="text-blue-400 text-xs font-bold shrink-0">🎲 초기 배치</span>
-                    <div className="flex gap-1">
-                      {d.map((v, i) => (
-                        <span key={i} className="w-6 h-6 bg-zinc-700 rounded text-sm font-bold text-white flex items-center justify-center">{v}</span>
-                      ))}
-                    </div>
-                    {setupDiceTopReady && (
-                      <span className="text-yellow-400 text-xs font-semibold">
-                        → {zoneOptions.map(z => ZONE_CONFIGS[z]?.displayName).join(' 또는 ')}
-                      </span>
+                    {setupDiceTopReady ? (
+                      <>
+                        <div className="flex gap-1">
+                          {d.map((v, i) => (
+                            <span key={i} className="w-6 h-6 bg-zinc-700 rounded text-sm font-bold text-white flex items-center justify-center">{v}</span>
+                          ))}
+                        </div>
+                        <span className="text-yellow-400 text-xs font-semibold">
+                          → {zoneOptions.map(z => ZONE_CONFIGS[z]?.displayName).join(' 또는 ')}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-500 text-xs animate-pulse">굴리는 중...</span>
                     )}
                     {currentOwner && (
                       <span className="text-zinc-500 text-xs">({currentOwner.nickname}님 배치 중)</span>
@@ -762,6 +766,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               setStagedHardwareItemId={setStagedHardwareItemId}
               hoveredCharId={hoveredCharId}
               selectedSetupCharId={selectedSetupCharId}
+              setupDiceTopReady={setupDiceTopReady}
               onLeave={onLeave}
               myItemIds={myItemIds}
             />

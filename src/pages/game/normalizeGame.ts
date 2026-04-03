@@ -74,5 +74,10 @@ export function normalizeGame(g: GameState): GameState {
     lastItemSearchAnnounce:   g.lastItemSearchAnnounce ?? null,
     zombieSpawnBatches:       Array.isArray(g.zombieSpawnBatches) ? g.zombieSpawnBatches : null,
     zombieSpawnStep:          g.zombieSpawnStep ?? 0,
+    securityOccupantsAtRoundStart: Array.isArray(g.securityOccupantsAtRoundStart)
+                                     ? g.securityOccupantsAtRoundStart
+                                     : g.securityOccupantsAtRoundStart && typeof g.securityOccupantsAtRoundStart === 'object'
+                                       ? Object.values(g.securityOccupantsAtRoundStart) as string[]
+                                       : [],
   }
 }
