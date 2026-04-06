@@ -65,7 +65,7 @@ export default function ZoneBoard({
     const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
     const candidates = z1 === z2 ? [z1] : [z1, z2]
     const available = candidates.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
-    return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
+    return available.length > 0 ? available : ['parking' as ZoneName]
   })()
 
   const isMyTurnToPlace = game.setupPlacementOrder[0] === uid
@@ -191,7 +191,7 @@ export default function ZoneBoard({
           : undefined
         }
         onMouseEnter={(isDestSelectable || isSetupPlaceable) ? () => setHoveredZone(zoneName) : undefined}
-        onMouseLeave={(isDestSelectable || isSetupPlaceable) ? () => setHoveredZone(null) : undefined}
+        onMouseLeave={() => setHoveredZone(null)}
         className={`absolute rounded-lg p-1.5 flex flex-col gap-1 text-xs backdrop-blur-sm transition-all z-10
           ${(isDestSelectable || isSetupPlaceable) ? 'cursor-pointer' : ''}
           ${zoneState.isClosed

@@ -20,7 +20,6 @@ import {
   instanceIdToItemId, PHASE_LABEL, COLOR_BG, ITEM_CATEGORY,
 } from './constants'
 
-const ZONE_ORDER: ZoneName[] = ['bathroom', 'clothing', 'toy', 'parking', 'security', 'supermarket']
 
 interface ActionPanelProps {
   game: GameState
@@ -135,7 +134,7 @@ export default function ActionPanel({
     const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
     const candidates = z1 === z2 ? [z1] : [z1, z2]
     const available = candidates.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
-    return available.length > 0 ? available : ZONE_ORDER.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
+    return available.length > 0 ? available : ['parking' as ZoneName]
   })()
 
   const myDeclaredCharId = game.characterDeclarations[uid ?? '']?.characterId
