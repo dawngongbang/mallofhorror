@@ -180,6 +180,7 @@ export function resolveNextSheriff(state: GameState): GameState {
     playerOrder: newOrder,
     sheriffIndex: 0,
     nextSheriffPlayerId: null,
+    justElectedSheriffId: newSheriffId,
   }
 }
 

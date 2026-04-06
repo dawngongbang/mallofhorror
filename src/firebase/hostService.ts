@@ -39,12 +39,13 @@ export async function hostRollDice(
   state: GameState
 ): Promise<GameState> {
   const roll = rollZombieDice()
-  const next = { ...state, lastDiceRoll: roll, phase: 'dice_reveal' as const, sheriffRollRequest: null }
+  const next = { ...state, lastDiceRoll: roll, phase: 'dice_reveal' as const, sheriffRollRequest: null, justElectedSheriffId: null }
 
   await patchGameState(roomCode, {
     lastDiceRoll: roll,
     phase: 'dice_reveal',
     sheriffRollRequest: null,
+    justElectedSheriffId: null,
   })
 
   return next
@@ -350,8 +351,11 @@ export async function hostEndRound(
   }
 
   // 보안관 교체 + 상태 갱신
+  const wasElected = !!state.nextSheriffPlayerId  // 투표 선출 여부 (resolveNextSheriff가 소거 전 체크)
   let next = resolveNextSheriff(state)
   next = updateSheriffStatus(next)
+  // 투표로 선출된 보안관은 정식 보안관 — 보안실 스냅샷과 무관하게 isRealSheriff = true
+  if (wasElected) next = { ...next, isRealSheriff: true }
   next = initRoundState(next)
   next = { ...next, round: next.round + 1, phase: 'roll_dice' }
 

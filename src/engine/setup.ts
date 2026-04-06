@@ -59,6 +59,7 @@ export function createInitialGameState(
     sheriffIndex,
     isRealSheriff: false,  // 초기에는 임시 보안관
     nextSheriffPlayerId: null,
+    justElectedSheriffId: null,
     securityOccupantsAtRoundStart: [],  // 게임 시작 시는 보안실 비어있음
 
     characters,

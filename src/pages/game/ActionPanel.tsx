@@ -376,6 +376,7 @@ export default function ActionPanel({
     // ── 주사위 (2라운드~) ────────────────────────────────────
     case 'roll_dice': {
       const isSheriff = uid === sheriffId
+      const justElected = game!.justElectedSheriffId
       const isZombiePlayer = uid ? Object.values(game!.characters)
         .filter(c => c.playerId === uid).length > 0
         && Object.values(game!.characters)
@@ -407,9 +408,18 @@ export default function ActionPanel({
         </div>
       )
 
+      const electedBanner = justElected && (
+        <div className="mb-3 bg-yellow-900/60 border border-yellow-600/50 rounded-xl px-3 py-2 text-center">
+          <p className="text-yellow-300 text-sm font-bold">
+            🏅 {players[justElected]?.nickname ?? justElected}님이 보안관으로 선출되었습니다!
+          </p>
+        </div>
+      )
+
       if (!isSheriff) {
         return (
           <div className="text-center">
+            {electedBanner}
             <p className="text-zinc-400 text-sm">
               보안관 <span className="text-white font-bold">{players[sheriffId]?.nickname}</span>이 주사위를 굴리는 중...
             </p>
@@ -419,6 +429,7 @@ export default function ActionPanel({
       }
       return (
         <div className="text-center">
+          {electedBanner}
           <button onClick={handleRollDice} disabled={actionLoading}
             className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
             {actionLoading ? '처리 중...' : '🎲 좀비 주사위 굴리기'}
