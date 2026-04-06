@@ -993,7 +993,7 @@ export default function ActionPanel({
       )
     }
 
-    // ── 투표 ────────────────────────────────────────────────
+    // ── 투표 (상세 UI는 맵 위 VoteOverlay에서 처리) ───────────
     case 'voting': {
       const pvs = game!.pendingVictimSelection
       if (pvs && !pvs.chosenCharacterId) {
