@@ -233,7 +233,8 @@ export async function submitWeaponUsePass(
     [`weaponKillChoices/${uid}`]: 0,
     [`weaponUseStatus/${uid}`]: true,
   }
-  if (hideCharId) patch[`hiddenCharacters/${hideCharId}`] = true
+  // hiddenCharacters는 $other(호스트 전용) 규칙에 걸리므로 pendingHideChoices에 기록 후 호스트가 처리
+  if (hideCharId) patch[`pendingHideChoices/${uid}`] = hideCharId
   await update(ref(db, `games/${roomCode}/game`), patch)
 }
 

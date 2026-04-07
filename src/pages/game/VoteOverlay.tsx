@@ -102,7 +102,7 @@ export default function VoteOverlay({
   if (announce) {
     const sortedTally = Object.entries(announce.tally).sort(([, a], [, b]) => b - a)
     const maxVotes = sortedTally[0]?.[1] ?? 0
-    const winnerId = sortedTally[0]?.[0]
+    const winnerId = announce.isRandomPick ? announce.randomWinnerId : sortedTally[0]?.[0]
     const winnerIcon = vote.type === 'zombie_attack' ? '💀' :
       vote.type === 'truck_search' ? '🚚' : '👮'
 
@@ -110,6 +110,15 @@ export default function VoteOverlay({
       <Wrapper onShowMap={onShowMap}
         title={`${voteIcon} ${voteZone.displayName} — ${voteTypeLabel} 결과`}
         type={vote.type}>
+        {/* 랜덤 지목 배너 */}
+        {announce.isRandomPick && (
+          <div className="mb-3 bg-orange-950/80 border border-orange-600 rounded-xl px-3 py-2 text-center animate-pulse">
+            <p className="text-orange-300 text-sm font-bold">🎲 5회 동률! 랜덤으로 지목되었습니다</p>
+            <p className="text-orange-400 text-xs mt-0.5">
+              {players[winnerId ?? '']?.nickname ?? '?'}님이 선택되었습니다
+            </p>
+          </div>
+        )}
         {/* 투표 내용 */}
         <div className="space-y-2 mb-4">
           {eligibleVoters.map(voterId => {
@@ -133,19 +142,19 @@ export default function VoteOverlay({
         {/* 득표 집계 */}
         <div className="border-t border-zinc-700 pt-3 space-y-2">
           {sortedTally.map(([candidateId, votes]) => {
-            const isWinner = votes === maxVotes
+            const isWinner = announce.isRandomPick ? candidateId === announce.randomWinnerId : votes === maxVotes
             return (
               <div key={candidateId}
                 className={`flex items-center justify-between rounded-xl px-3 py-2 transition-all
-                  ${isWinner ? 'bg-red-950/80 border border-red-700' : 'bg-zinc-900/60'}`}>
+                  ${isWinner ? (announce.isRandomPick ? 'bg-orange-950/80 border border-orange-600' : 'bg-red-950/80 border border-red-700') : 'bg-zinc-900/60'}`}>
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${COLOR_BG[players[candidateId]?.color ?? ''] ?? 'bg-zinc-500'}`} />
                   <span className={`text-sm font-bold ${isWinner ? 'text-white' : 'text-zinc-400'}`}>
                     {players[candidateId]?.nickname ?? '?'}
                   </span>
                 </div>
-                <span className={`text-sm font-bold ${isWinner ? 'text-red-400' : 'text-zinc-500'}`}>
-                  {votes}표 {isWinner ? winnerIcon : ''}
+                <span className={`text-sm font-bold ${isWinner ? (announce.isRandomPick ? 'text-orange-400' : 'text-red-400') : 'text-zinc-500'}`}>
+                  {announce.isRandomPick ? '' : `${votes}표 `}{isWinner ? winnerIcon : `${votes}표`}
                 </span>
               </div>
             )

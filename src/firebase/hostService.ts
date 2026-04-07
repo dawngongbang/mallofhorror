@@ -170,14 +170,17 @@ export async function hostResolveVote(
   roomCode: string,
   state: GameState,
   // zombie_attack일 때: 패배자가 선택한 희생 캐릭터 ID
-  victimCharacterId?: string
+  victimCharacterId?: string,
+  // 랜덤 지목 등 강제 winner 지정 시 사용
+  overrideWinnerId?: string
 ): Promise<GameState> {
   if (!state.currentVote) return state
 
   const voteState = state.currentVote
-  const result = calculateVoteResult(voteState, state)
+  const calcResult = calculateVoteResult(voteState, state)
+  const result = overrideWinnerId ? { ...calcResult, winner: overrideWinnerId } : calcResult
 
-  // 동률 → 재투표
+  // 동률 → 재투표 (overrideWinnerId 없을 때만)
   if (!result.winner) {
     // 2차 동률(round >= 1)부터는 전체 생존 플레이어로 확대
     const nextEligibleVoters = voteState.round >= 1

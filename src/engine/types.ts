@@ -247,6 +247,8 @@ export interface GameState {
     votes: Record<string, string>              // voterId → targetPlayerId
     tally: Record<string, number>              // candidateId → 득표 수 (가중치 포함)
     bonusVoteWeights: Record<string, number>   // playerId → 협박카드 보너스 (>0이면 사용한 것)
+    isRandomPick?: boolean                     // 5회 동률 초과 시 랜덤 선택 여부
+    randomWinnerId?: string                    // 랜덤으로 선택된 희생자 ID
   } | null
 
   // 가장 최근 좀비 공격 사망 결과 (zone_announce에서 공지용)

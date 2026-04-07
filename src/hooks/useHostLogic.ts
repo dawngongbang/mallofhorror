@@ -184,10 +184,10 @@ export function useHostLogic(params: {
             await patchGameState(roomCode, {
               zones: updatedGame.zones,
               characters: updatedGame.characters,
-              weaponKillChoices: {},
-              pendingHideChoices: {},
-              pendingSprintChoices: {},
-              pendingHardwareChoices: {},
+              weaponKillChoices: null as any,
+              pendingHideChoices: null as any,
+              pendingSprintChoices: null as any,
+              pendingHardwareChoices: null as any,
               ...(weaponAnnounce ? { lastWeaponUseAnnounce: weaponAnnounce } : {}),
               ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenChars } : {}),
               ...(sprintAnnounce ? { lastSprintAnnounce: sprintAnnounce } : {}),
@@ -204,13 +204,13 @@ export function useHostLogic(params: {
                 await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
               } else if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
                 if (revealAnnounce) {
-                  await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+                  await patchGameState(roomCode, { hiddenCharacters: null as any, lastHideRevealAnnounce: revealAnnounce })
                   await new Promise<void>(r => setTimeout(r, 1500))
                 }
-                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
+                await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: null as any })
               } else {
                 if (revealAnnounce) {
-                  await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+                  await patchGameState(roomCode, { hiddenCharacters: null as any, lastHideRevealAnnounce: revealAnnounce })
                   await new Promise<void>(r => setTimeout(r, 1500))
                 }
                 await hostEndRound(roomCode, { ...updatedGame, hiddenCharacters: {} })
@@ -257,8 +257,19 @@ export function useHostLogic(params: {
             cv.eligibleVoters.every(id => cv.status[id])
           if (allVoted) {
             const result = calculateVoteResult(cv, game)
+            // 좀비 공격 5회 동률 초과 → 랜덤 선택 표시
+            const isTie = !result.winner
+            const isRandomPickCase = isTie && cv.type === 'zombie_attack' && cv.round >= 4
+            const randomWinnerId = isRandomPickCase
+              ? cv.candidates[Math.floor(Math.random() * cv.candidates.length)]
+              : undefined
             await patchGameState(roomCode, {
-              lastVoteAnnounce: { votes: cv.votes ?? {}, tally: result.tally, bonusVoteWeights: cv.bonusVoteWeights ?? {} },
+              lastVoteAnnounce: {
+                votes: cv.votes ?? {},
+                tally: result.tally,
+                bonusVoteWeights: cv.bonusVoteWeights ?? {},
+                ...(isRandomPickCase ? { isRandomPick: true, randomWinnerId } : {}),
+              },
             })
             didWork = true
           }
@@ -371,10 +382,10 @@ export function useHostLogic(params: {
       await patchGameState(roomCode, {
         zones: updatedG.zones,
         characters: updatedG.characters,
-        weaponKillChoices: {},
-        pendingHideChoices: {},
-        pendingSprintChoices: {},
-        pendingHardwareChoices: {},
+        weaponKillChoices: null as any,
+        pendingHideChoices: null as any,
+        pendingSprintChoices: null as any,
+        pendingHardwareChoices: null as any,
         ...(weaponAnnounceG ? { lastWeaponUseAnnounce: weaponAnnounceG } : {}),
         ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenCharsG } : {}),
         ...(sprintAnnounceG ? { lastSprintAnnounce: sprintAnnounceG } : {}),
@@ -391,11 +402,11 @@ export function useHostLogic(params: {
         return
       }
       if (revealAnnounce) {
-        await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce })
+        await patchGameState(roomCode, { hiddenCharacters: null as any, lastHideRevealAnnounce: revealAnnounce })
         await new Promise<void>(r => setTimeout(r, 1500))
       }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
+        await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: null as any })
       } else {
         await hostEndRound(roomCode, { ...updatedG, hiddenCharacters: {} })
       }
@@ -432,16 +443,17 @@ export function useHostLogic(params: {
 
       if (cv.type === 'zombie_attack') {
         const result = calculateVoteResult(cv, g)
-        if (result.winner) {
+        const effectiveWinner = result.winner ?? (g.lastVoteAnnounce?.isRandomPick ? g.lastVoteAnnounce.randomWinnerId : undefined)
+        if (effectiveWinner) {
           const loserCharsInZone = Object.values(g.characters)
-            .filter(c => c.playerId === result.winner && c.isAlive && g.zones[cv.zone].characterIds.includes(c.id))
+            .filter(c => c.playerId === effectiveWinner && c.isAlive && g.zones[cv.zone].characterIds.includes(c.id))
           if (loserCharsInZone.length <= 1) {
-            const nextState = await hostResolveVote(roomCode, g, loserCharsInZone[0]?.id)
+            const nextState = await hostResolveVote(roomCode, g, loserCharsInZone[0]?.id, effectiveWinner)
             if (nextState.phase === 'event' && !nextState.itemSearchPreview) {
               await patchGameState(roomCode, { phase: 'zone_announce' })
             }
           } else {
-            await patchGameState(roomCode, { pendingVictimSelection: { zone: cv.zone, loserPlayerId: result.winner }, lastVoteAnnounce: null })
+            await patchGameState(roomCode, { pendingVictimSelection: { zone: cv.zone, loserPlayerId: effectiveWinner }, lastVoteAnnounce: null })
           }
         } else {
           await hostResolveVote(roomCode, g, undefined)
@@ -517,7 +529,7 @@ export function useHostLogic(params: {
     const capturedGame = game
     const timer = setTimeout(async () => {
       await hostApplyDiceRoll(roomCode, capturedGame)
-    }, 3000)
+    }, 5000)
     return () => clearTimeout(timer)
   }, [game?.phase, isHost, roomCode])
 
@@ -600,7 +612,7 @@ export function useHostLogic(params: {
       const closedState = checkAndCloseZone(zone, g)
       if (closedState) {
         if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-          await patchGameState(roomCode, { zones: closedState.zones, currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
+          await patchGameState(roomCode, { zones: closedState.zones, currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: null as any })
         } else {
           await hostEndRound(roomCode, { ...closedState, hiddenCharacters: {} })
         }
@@ -609,7 +621,7 @@ export function useHostLogic(params: {
 
       if (g.zones[zone].isClosed) {
         if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
-          await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: {} })
+          await patchGameState(roomCode, { currentEventZoneIndex: nextZoneIndex, phase: 'event', hiddenCharacters: null as any })
         } else {
           await hostEndRound(roomCode, { ...g, hiddenCharacters: {} })
         }
@@ -619,7 +631,7 @@ export function useHostLogic(params: {
       const voteMs = (meta?.settings.votingTime ?? 60) * 1000
       const attackState = startZoneAttackPhase(zone, g)
       if (attackState) {
-        await patchGameState(roomCode, { phase: 'weapon_use', phaseDeadline: Date.now() + 15000, weaponUseStatus: {}, weaponKillChoices: {} })
+        await patchGameState(roomCode, { phase: 'weapon_use', phaseDeadline: Date.now() + 15000, weaponUseStatus: null as any, weaponKillChoices: null as any })
         return
       }
       const survivorState = startZoneSurvivorPhase(zone, g)
@@ -629,7 +641,7 @@ export function useHostLogic(params: {
       }
       const revealAnnounce = buildReveal(g)
       if (revealAnnounce) {
-        await patchGameState(roomCode, { hiddenCharacters: {}, lastHideRevealAnnounce: revealAnnounce, lastZombieAttackResult: null })
+        await patchGameState(roomCode, { hiddenCharacters: null as any, lastHideRevealAnnounce: revealAnnounce, lastZombieAttackResult: null })
         await new Promise<void>(r => setTimeout(r, 1500))
       }
       if (nextZoneIndex < EVENT_ZONE_ORDER.length) {
@@ -637,7 +649,7 @@ export function useHostLogic(params: {
           currentEventZoneIndex: nextZoneIndex,
           phase: 'event',
           lastZombieAttackResult: null,
-          hiddenCharacters: {},
+          hiddenCharacters: null as any,
         })
       } else {
         await hostEndRound(roomCode, { ...g, hiddenCharacters: {} })

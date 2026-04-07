@@ -313,9 +313,29 @@ export default function ActionPanel({
       )
 
       if (uid !== sheriffId || !game!.isRealSheriff) {
+        const isZombiePlayerDR2 = uid ? Object.values(game!.characters)
+          .filter(c => c.playerId === uid).length > 0
+          && Object.values(game!.characters)
+          .filter(c => c.playerId === uid).every(c => !c.isAlive)
+          : false
+        const roll2 = game!.lastDiceRoll
         return (
           <div className="text-center">
             <p className="text-zinc-400 text-sm">보안관이 주사위 결과를 확인 중...</p>
+            {/* 사망자는 좀비 배치 위치를 미리 확인 가능 */}
+            {isZombiePlayerDR2 && roll2 && (
+              <div className="mt-2 mb-2">
+                <p className="text-red-400 text-xs font-bold mb-1">🧟 이번 라운드 좀비 배치</p>
+                <div className="flex flex-wrap justify-center gap-1">
+                  {Object.entries(roll2.zombiesByZone).map(([zone, count]) => (
+                    <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg text-xs">
+                      <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
+                      <span className="text-red-400 ml-1">+{count}🧟</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-zinc-600 text-xs mt-1">잠시 후 이동 페이즈가 시작됩니다</p>
             {zombieSelectorDR}
           </div>
