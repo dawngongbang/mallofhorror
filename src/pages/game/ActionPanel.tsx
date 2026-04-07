@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  selectVote,
-  confirmVote,
   patchGameState,
   submitItemSearchChoice,
   submitSheriffRollRequest,
-  submitVictimChoice,
   submitWeaponConfirm,
   submitWeaponUsePass,
   submitZombiePlayerZoneChoice,
@@ -143,9 +140,6 @@ export default function ActionPanel({
   const myDestConfirmed = !!(uid && game.destinationStatus[uid])
   const myMovingChar = uid ? game.characterDeclarations[uid]?.characterId : undefined
   const myMovingCharData = myMovingChar ? game.characters[myMovingChar] : undefined
-  const myVote = uid && game.currentVote ? game.currentVote.votes[uid] : undefined
-  const myVoteConfirmed = !!(uid && game.currentVote?.status[uid])
-
   // ── Handlers ──────────────────────────────────────────────────
 
   async function handleRollSetup() {
@@ -161,20 +155,6 @@ export default function ActionPanel({
     if (!game || actionLoading) return
     setActionLoading(true)
     try { await submitSheriffRollRequest(roomCode) }
-    finally { setActionLoading(false) }
-  }
-
-  async function handleSelectVote(targetPlayerId: string) {
-    if (!uid || !game?.currentVote || myVoteConfirmed || actionLoading) return
-    setActionLoading(true)
-    try { await selectVote(roomCode, targetPlayerId) }
-    finally { setActionLoading(false) }
-  }
-
-  async function handleConfirmVote() {
-    if (!uid || !myVote || myVoteConfirmed || actionLoading) return
-    setActionLoading(true)
-    try { await confirmVote(roomCode) }
     finally { setActionLoading(false) }
   }
 
@@ -993,186 +973,12 @@ export default function ActionPanel({
       )
     }
 
-    // ── 투표 (상세 UI는 맵 위 VoteOverlay에서 처리) ───────────
+    // ── 투표 (맵 위 VoteOverlay에서 처리) ──────────────────────
     case 'voting': {
-      const pvs = game!.pendingVictimSelection
-      if (pvs && !pvs.chosenCharacterId) {
-        const isLoser = uid === pvs.loserPlayerId
-        if (isLoser) {
-          const myCharsInZone = Object.values(game!.characters).filter(
-            c => c.playerId === uid && c.isAlive
-              && game!.zones[pvs.zone].characterIds.includes(c.id)
-              && !game!.hiddenCharacters?.[c.id]
-          )
-          return (
-            <div>
-              <p className="text-red-400 font-bold text-sm mb-2">
-                💀 {ZONE_CONFIGS[pvs.zone].displayName} — 희생할 캐릭터를 선택하세요
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {myCharsInZone.map(c => (
-                  <button key={c.id} onClick={async () => {
-                    setActionLoading(true)
-                    try {
-                      console.log('[VICTIM] submitting choice:', c.id)
-                      await submitVictimChoice(roomCode, c.id)
-                      console.log('[VICTIM] submitted OK')
-                    } catch (err) {
-                      console.error('[VICTIM] submit error:', err)
-                    } finally {
-                      setActionLoading(false)
-                    }
-                  }} disabled={actionLoading}
-                    className="bg-zinc-700 hover:bg-red-800 text-white px-3 py-2 rounded-xl text-sm transition-colors">
-                    {CHARACTER_CONFIGS[c.characterId]?.name ?? c.characterId}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        }
-        return (
-          <p className="text-zinc-400 text-sm">
-            <span className="text-white font-bold">{players[pvs.loserPlayerId]?.nickname}</span>이 희생할 캐릭터를 선택 중...
-          </p>
-        )
-      }
-
-      if (!game!.currentVote) return <p className="text-zinc-400 text-sm">투표 준비 중...</p>
-      const vote = game!.currentVote
-      const voteZone = ZONE_CONFIGS[vote.zone]
-      const voteTypeLabel = vote.type === 'zombie_attack' ? '좀비 공격' :
-        vote.type === 'truck_search' ? '트럭 수색' : '보안관 선출'
-
-      const candidates = (vote.candidates ?? []).map(id => ({
-        id,
-        nickname: players[id]?.nickname ?? '?',
-        color: players[id]?.color ?? 'red',
-      }))
-
-      const eligibleVoters = vote.eligibleVoters ?? []
-      const confirmedCount = eligibleVoters.filter(id => vote.status[id]).length
-      const canVote = eligibleVoters.includes(uid ?? '')
-
-      const announce = game!.lastVoteAnnounce
-      if (announce) {
-        const sortedTally = Object.entries(announce.tally)
-          .sort(([, a], [, b]) => b - a)
-        const maxVotes = sortedTally[0]?.[1] ?? 0
-
-        return (
-          <div>
-            <p className="text-sm text-zinc-400 mb-3">
-              <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel} 결과
-            </p>
-
-            <div className="space-y-1 mb-3">
-              {eligibleVoters.map(voterId => {
-                const targetId = announce.votes[voterId]
-                const voterName = players[voterId]?.nickname ?? '?'
-                const targetName = targetId ? (players[targetId]?.nickname ?? '?') : '기권'
-                const bonus = announce.bonusVoteWeights?.[voterId] ?? 0
-                return (
-                  <div key={voterId} className="flex items-center gap-2 text-sm">
-                    <span className={`font-medium ${voterId === uid ? 'text-blue-300' : 'text-zinc-300'}`}>
-                      {voterName}
-                    </span>
-                    {bonus > 0 && (
-                      <span className="text-xs text-orange-400 font-bold">😤 협박(+{bonus})</span>
-                    )}
-                    <span className="text-zinc-600">→</span>
-                    <span className={targetId ? 'text-red-300 font-medium' : 'text-zinc-500'}>{targetName}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {Object.entries(announce.bonusVoteWeights ?? {}).some(([, v]) => v > 0) && (
-              <div className="mb-3 space-y-1">
-                {Object.entries(announce.bonusVoteWeights ?? {})
-                  .filter(([, v]) => v > 0)
-                  .map(([pid, bonus]) => (
-                    <p key={pid} className="text-xs text-orange-400">
-                      😤 <span className="font-bold">{players[pid]?.nickname ?? '?'}님</span>이 협박 아이템으로 투표권 +{bonus}을 행사하였습니다.
-                    </p>
-                  ))}
-              </div>
-            )}
-
-            {(() => {
-              const winnerIcon = vote.type === 'zombie_attack' ? ' 💀' : vote.type === 'truck_search' ? ' 🚚' : ' 👮'
-              return (
-                <div className="border-t border-zinc-800 pt-2 space-y-1">
-                  {sortedTally.map(([candidateId, votes]) => (
-                    <div key={candidateId} className={`flex items-center justify-between text-sm ${votes === maxVotes ? 'text-white font-bold' : 'text-zinc-400'}`}>
-                      <span>{players[candidateId]?.nickname ?? '?'}</span>
-                      <span className={votes === maxVotes ? 'text-red-400' : ''}>{votes}표{votes === maxVotes ? winnerIcon : ''}</span>
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-
-            {vote.type === 'sheriff' && sortedTally[0] && (
-              <div className="mt-3 bg-yellow-900/60 border border-yellow-600/50 rounded-xl px-3 py-2 text-center">
-                <p className="text-yellow-300 text-sm font-bold">
-                  🏅 {players[sortedTally[0][0]]?.nickname ?? sortedTally[0][0]}님이 다음 라운드 보안관으로 선출되었습니다!
-                </p>
-              </div>
-            )}
-
-            <p className="text-zinc-600 text-xs mt-3">잠시 후 다음 단계로 진행됩니다...</p>
-          </div>
-        )
-      }
-
       return (
-        <div>
-          <div className="mb-2">
-            <p className="text-sm text-zinc-400">
-              <span className="text-yellow-400 font-bold">{voteZone.displayName}</span> — {voteTypeLabel}
-              {vote.round > 0 && <span className="text-zinc-500 text-xs"> (재투표 {vote.round}회차)</span>}
-            </p>
-          </div>
-
-          {canVote ? (
-            <>
-              <div className="flex gap-2 flex-wrap mb-3">
-                {candidates.map(c => (
-                  <button key={c.id}
-                    onClick={() => handleSelectVote(c.id)}
-                    disabled={myVoteConfirmed || actionLoading}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${
-                      myVote === c.id
-                        ? 'bg-red-700 ring-2 ring-red-400 text-white'
-                        : 'bg-zinc-700 hover:bg-red-800 text-white disabled:opacity-50'
-                    }`}>
-                    <div className={`w-3 h-3 rounded-full shrink-0 ${COLOR_BG[c.color]}`} />
-                    {c.nickname}
-                  </button>
-                ))}
-              </div>
-
-              {myVoteConfirmed ? (
-                <p className="text-green-400 text-sm">✓ <span className="text-white">{players[myVote ?? '']?.nickname}</span>에게 투표 확정</p>
-              ) : myVote ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-400 text-xs">선택: <span className="text-red-300 font-medium">{players[myVote]?.nickname}</span></span>
-                  <button onClick={handleConfirmVote} disabled={actionLoading}
-                    className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
-                    확정
-                  </button>
-                </div>
-              ) : (
-                <p className="text-zinc-600 text-xs">투표할 대상을 선택하세요</p>
-              )}
-            </>
-          ) : (
-            <p className="text-zinc-500 text-sm">이번 투표에 참여하지 않습니다.</p>
-          )}
-
-          <p className="text-zinc-600 text-xs mt-2">{confirmedCount} / {eligibleVoters.length}명 확정</p>
-        </div>
+        <p className="text-zinc-500 text-sm text-center animate-pulse">
+          🗳️ 맵에서 투표를 진행하세요
+        </p>
       )
     }
 

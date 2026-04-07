@@ -77,8 +77,11 @@ export default function ZoneBoard({
     (uid === sheriffId && game.isRealSheriff) ||
     (uid ? game.cctvViewers.includes(uid) : false)
   )
+  // roll_dice/dice_reveal 중엔 아직 애니메이션 중이므로 구역 뱃지 숨김 (헤더 배너와 동일 기준)
   const incomingZombies: Partial<Record<ZoneName, number>> =
-    canSeeDice && game.lastDiceRoll ? game.lastDiceRoll.zombiesByZone as Partial<Record<ZoneName, number>> : {}
+    canSeeDice && game.lastDiceRoll && !['roll_dice', 'dice_reveal'].includes(game.phase)
+      ? game.lastDiceRoll.zombiesByZone as Partial<Record<ZoneName, number>>
+      : {}
   const currentDeclarerId = game?.declarationOrder.find(pid => !game.characterDeclarations[pid]) ?? null
   const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone
   const myDestConfirmed = !!(uid && game.destinationStatus[uid])

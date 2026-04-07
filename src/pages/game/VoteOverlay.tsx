@@ -247,7 +247,7 @@ function Wrapper({
   return (
     <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
       z-30 flex flex-col rounded-2xl overflow-hidden shadow-2xl
-      w-[62%] max-h-[76%]
+      w-[80%] max-h-[80%]
       bg-zinc-900/96 border ${accentCls} backdrop-blur-sm`}>
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">

@@ -86,6 +86,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     if (game?.phase === 'voting') setShowVoteOverlay(true)
   }, [game?.phase])
 
+  // 페이즈 전환 시 hoveredZone 초기화 (이전 페이즈 하이라이트 잔재 방지)
+  useEffect(() => {
+    setHoveredZone(null)
+  }, [game?.phase])
+
   // ── 캐릭터 이동 애니메이션 ────────────────────────────────────
   useLayoutEffect(() => {
     if (!game) return
