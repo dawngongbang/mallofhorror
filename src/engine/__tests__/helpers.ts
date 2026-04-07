@@ -67,6 +67,7 @@ export function createTestState(): GameState {
     lastItemSearchAnnounce: null,
     zombieSpawnBatches: null,
     zombieSpawnStep: 0,
+    lastSpawnedZones: null,
     lastBonusZombieResult: null,
 
     winners: [],

@@ -228,15 +228,30 @@ export default function ZoneBoard({
 
         {/* 좀비 아이콘 */}
         <div className="flex flex-wrap gap-0 min-h-[18px] leading-none">
-          {Array.from({ length: Math.min(zoneState.zombies, 9) }).map((_, i) => (
-            <span key={i} className={`text-base leading-none ${isUnderAttackNow ? 'text-red-300' : ''}`}>🧟</span>
-          ))}
-          {zoneState.zombies > 9 && (
-            <span className="text-red-400 font-bold text-xs self-center ml-0.5">+{zoneState.zombies - 9}</span>
-          )}
-          {zoneState.zombies === 0 && (
-            <span className="text-zinc-600 text-[10px]">좀비 없음</span>
-          )}
+          {(() => {
+            const total = zoneState.zombies
+            const visible = Math.min(total, 9)
+            const newCount = game!.lastSpawnedZones?.[zoneName] ?? 0
+            const newStart = visible - Math.min(newCount, visible)
+            return (
+              <>
+                {Array.from({ length: visible }).map((_, i) => {
+                  const isNew = newCount > 0 && i >= newStart
+                  return (
+                    <span key={i} className={`text-base leading-none ${
+                      isUnderAttackNow ? 'text-red-300' : isNew ? 'animate-pulse' : ''
+                    }`} style={isNew && !isUnderAttackNow ? { filter: 'sepia(1) saturate(3) hue-rotate(20deg)' } : undefined}>🧟</span>
+                  )
+                })}
+                {total > 9 && (
+                  <span className="text-red-400 font-bold text-xs self-center ml-0.5">+{total - 9}</span>
+                )}
+                {total === 0 && (
+                  <span className="text-zinc-600 text-[10px]">좀비 없음</span>
+                )}
+              </>
+            )
+          })()}
         </div>
 
         {/* 방어력 (활성 구역만) */}

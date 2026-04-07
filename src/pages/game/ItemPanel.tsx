@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { GameState } from '../../engine/types'
 import type { ZoneName } from '../../engine/types'
 import { CHARACTER_CONFIGS, ITEM_CONFIGS, EVENT_ZONE_ORDER, ZONE_CONFIGS } from '../../engine/constants'
@@ -48,6 +49,8 @@ export default function ItemPanel({
   actionLoading,
   onUseItem,
 }: ItemPanelProps) {
+  const [infoItemId, setInfoItemId] = useState<string | null>(null)
+
   if (myItemIds.length === 0) return null
 
   return (
@@ -185,19 +188,33 @@ export default function ItemPanel({
             )
           }
 
+          const isInfoOpen = infoItemId === instanceId
           return (
-            <button key={instanceId}
-              title={cfg.description}
-              onClick={() => isUsable && setConfirmingItems(prev => new Set(prev).add(instanceId))}
-              disabled={!isUsable}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-colors ${
+            <div key={instanceId} className="flex flex-col gap-1">
+              <div className={`flex items-center gap-1 rounded-lg transition-colors ${
                 isUsable
-                  ? 'bg-zinc-700 hover:bg-zinc-600 text-white cursor-pointer ring-1 ring-zinc-500'
-                  : 'bg-zinc-800 text-zinc-500 cursor-default'
+                  ? 'bg-zinc-700 text-white ring-1 ring-zinc-500'
+                  : 'bg-zinc-800 text-zinc-500'
               }`}>
-              <span className="text-sm">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
-              <span className="text-xs font-medium">{cfg.name}</span>
-            </button>
+                <button
+                  onClick={() => isUsable && setConfirmingItems(prev => new Set(prev).add(instanceId))}
+                  disabled={!isUsable}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 flex-1 ${isUsable ? 'cursor-pointer' : 'cursor-default'}`}>
+                  <span className="text-sm">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
+                  <span className="text-xs font-medium">{cfg.name}</span>
+                </button>
+                <button
+                  onClick={() => setInfoItemId(isInfoOpen ? null : instanceId)}
+                  className="px-1.5 py-1 text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors border-l border-zinc-700">
+                  ℹ
+                </button>
+              </div>
+              {isInfoOpen && (
+                <p className="text-[10px] text-zinc-300 bg-zinc-800/80 rounded-lg px-2.5 py-1.5 leading-snug">
+                  {cfg.description}
+                </p>
+              )}
+            </div>
           )
         })}
       </div>

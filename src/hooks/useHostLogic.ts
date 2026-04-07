@@ -557,12 +557,25 @@ export function useHostLogic(params: {
       if (!g || g.phase !== 'zombie_spawn' || g.zombieSpawnStep !== step) return
 
       if (nextStep >= batches.length) {
+        // 이번 턴 구역별 신규 좀비 수 집계
+        const lastSpawnedZones: Partial<Record<import('../engine/types').ZoneName, number>> = {}
+        for (const b of batches) {
+          if (b.type === 'dice') {
+            for (const [z, cnt] of Object.entries(b.zones)) {
+              const zone = z as import('../engine/types').ZoneName
+              lastSpawnedZones[zone] = (lastSpawnedZones[zone] ?? 0) + (cnt as number)
+            }
+          } else {
+            lastSpawnedZones[b.zone] = (lastSpawnedZones[b.zone] ?? 0) + 1
+          }
+        }
         await patchGameState(roomCode, {
           phase: 'event',
           currentEventZoneIndex: 0,
           zombiePlayerZoneChoices: {},
           zombieSpawnBatches: null,
           zombieSpawnStep: 0,
+          lastSpawnedZones,
         })
         return
       }

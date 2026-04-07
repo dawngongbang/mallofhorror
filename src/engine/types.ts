@@ -323,6 +323,7 @@ export interface GameState {
     | { type: 'zombie_player'; zone: ZoneName; playerId: string }
   )[] | null
   zombieSpawnStep: number   // 현재까지 공지 완료된 배치 단계
+  lastSpawnedZones: Partial<Record<ZoneName, number>> | null  // 이번 턴 구역별 신규 좀비 수
 
   // 트럭 수색 완료 공지
   lastItemSearchAnnounce: {

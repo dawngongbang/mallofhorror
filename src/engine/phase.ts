@@ -132,6 +132,7 @@ export function initRoundState(state: GameState): GameState {
     lastItemSearchAnnounce: null,
     zombieSpawnBatches: null,
     zombieSpawnStep: 0,
+    lastSpawnedZones: null,
     lastVoteAnnounce: null,
     itemSearchWinnerId: null,
     itemSearchChoice: null,

@@ -106,6 +106,7 @@ export function createInitialGameState(
     lastItemSearchAnnounce: null,
     zombieSpawnBatches: null,
     zombieSpawnStep: 0,
+    lastSpawnedZones: null,
     lastBonusZombieResult: null,
 
     winners: [],
