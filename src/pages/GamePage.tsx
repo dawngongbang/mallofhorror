@@ -69,6 +69,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
   const isHost = meta?.hostId === uid
 
+  // 게임 페이지 진입 시 줌 잠금, 이탈 시 복원
+  useEffect(() => {
+    const viewport = document.querySelector('meta[name="viewport"]')
+    const original = viewport?.getAttribute('content') ?? ''
+    viewport?.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+    return () => { viewport?.setAttribute('content', original) }
+  }, [])
+
   // ── subscriptions ─────────────────────────────────────────────
   useEffect(() => {
     const unsubGame = subscribeToGame(roomCode, g => setGame(g ? normalizeGame(g) : null))
