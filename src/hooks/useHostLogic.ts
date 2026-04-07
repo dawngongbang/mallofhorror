@@ -570,7 +570,7 @@ export function useHostLogic(params: {
           ? { lastZombiePlayerAnnounce: { entries: [{ playerId: batch.playerId, zone: batch.zone }] } }
           : {}),
       })
-    }, 2500)
+    }, 3500)
     return () => clearTimeout(timer)
   }, [game?.phase, game?.zombieSpawnStep, isHost, roomCode])
 

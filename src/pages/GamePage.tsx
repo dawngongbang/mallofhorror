@@ -408,41 +408,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               if (game.phase === 'zombie_spawn') {
                 const batches = game.zombieSpawnBatches ?? []
                 const step = game.zombieSpawnStep
-                const batch = batches[step] ?? null
-                if (!batch) return null
-                if (batch.type === 'dice') {
-                  const lines = Object.entries(batch.zones).map(([zone, cnt]) =>
-                    `${ZONE_CONFIGS[zone as ZoneName]?.displayName} +${cnt}`
-                  ).join('  ')
-                  return (
-                    <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap">
-                      <span className="text-yellow-400 text-xs font-bold shrink-0">🎲 좀비 배치 ({step + 1}/{batches.length})</span>
-                      <span className="text-zinc-300 text-xs">{lines}</span>
-                    </div>
-                  )
-                }
-                if (batch.type === 'crowded') return (
-                  <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2">
-                    <span className="text-yellow-400 text-xs font-bold shrink-0">👥 좀비 배치 ({step + 1}/{batches.length})</span>
-                    <span className="text-red-300 text-xs">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
+                return (
+                  <div className="w-full bg-zinc-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
+                    <span className="text-red-400 text-xs font-bold animate-pulse">🧟 좀비 배치 중... ({step + 1}/{batches.length})</span>
                   </div>
                 )
-                if (batch.type === 'belle') return (
-                  <div className="w-full bg-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2">
-                    <span className="text-yellow-400 text-xs font-bold shrink-0">💄 좀비 배치 ({step + 1}/{batches.length})</span>
-                    <span className="text-red-300 text-xs">{ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!</span>
-                  </div>
-                )
-                if (batch.type === 'zombie_player') {
-                  const pName = players[batch.playerId]?.nickname ?? batch.playerId
-                  return (
-                    <div className="w-full bg-red-950 rounded-xl px-3 py-2 flex items-center gap-2">
-                      <span className="text-yellow-400 text-xs font-bold shrink-0">🧟 좀비 배치 ({step + 1}/{batches.length})</span>
-                      <span className="text-red-300 text-xs">{pName}님이 {ZONE_CONFIGS[batch.zone].displayName}에 출현!</span>
-                    </div>
-                  )
-                }
-                return null
               }
 
               if (game.phase === 'setup_place') {
@@ -526,6 +496,48 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               alt="몰오브호러 맵"
               className="w-full h-full object-cover rounded-xl"
             />
+            {/* 좀비 배치 오버레이 */}
+            {game.phase === 'zombie_spawn' && (() => {
+              const batches = game.zombieSpawnBatches ?? []
+              const step = game.zombieSpawnStep
+              const batch = batches[step] ?? null
+              if (!batch) return null
+
+              let icon = '🧟', title = '', subtitle = '', accent = 'border-red-700'
+              if (batch.type === 'dice') {
+                icon = '🎲'
+                title = '좀비 배치'
+                subtitle = Object.entries(batch.zones).map(([z, cnt]) =>
+                  `${ZONE_CONFIGS[z as ZoneName]?.displayName} +${cnt}`
+                ).join(' · ')
+                accent = 'border-yellow-700'
+              } else if (batch.type === 'crowded') {
+                icon = '👥'
+                title = '과밀 출현'
+                subtitle = `${ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!`
+              } else if (batch.type === 'belle') {
+                icon = '💄'
+                title = '미녀 추가 출현'
+                subtitle = `${ZONE_CONFIGS[batch.zone].displayName}에 좀비 출현!`
+              } else if (batch.type === 'zombie_player') {
+                icon = '🧟'
+                title = '좀비 플레이어 등장'
+                subtitle = `${players[batch.playerId]?.nickname ?? '?'}님이 ${ZONE_CONFIGS[batch.zone].displayName}에 출현!`
+                accent = 'border-red-500'
+              }
+
+              return (
+                <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30
+                  w-[72%] bg-zinc-900/96 border-2 ${accent} rounded-2xl shadow-2xl
+                  flex flex-col items-center justify-center gap-2 px-5 py-5 text-center`}>
+                  <span className="text-4xl leading-none">{icon}</span>
+                  <p className="text-white font-bold text-base leading-tight">{title}</p>
+                  <p className="text-zinc-200 text-sm leading-snug">{subtitle}</p>
+                  <p className="text-zinc-500 text-xs mt-1">{step + 1} / {batches.length}</p>
+                </div>
+              )
+            })()}
+
             {/* 투표 오버레이 */}
             {game.phase === 'voting' && showVoteOverlay && (
               <VoteOverlay
