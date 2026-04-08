@@ -557,75 +557,10 @@ export default function ActionPanel({
       )
     }
 
-    // ── 좀비 순차 배치 공지 ──────────────────────────────────
+    // ── 좀비 순차 배치 공지 (맵 오버레이로 표시되므로 패널은 간단히)
     case 'zombie_spawn': {
-      const batches = game!.zombieSpawnBatches ?? []
-      const step = game!.zombieSpawnStep
-      const currentBatch = batches[step] ?? null
       return (
-        <div>
-          {/* 진행 단계 표시 */}
-          <div className="flex items-center gap-1 mb-3">
-            <span className="text-red-500 text-sm font-bold">🧟 좀비 배치</span>
-            <div className="flex gap-0.5 ml-1">
-              {batches.map((_, i) => (
-                <div key={i} className={`h-1.5 rounded-full transition-all ${
-                  i < step ? 'w-3 bg-red-800' : i === step ? 'w-4 bg-red-400' : 'w-3 bg-zinc-700'
-                }`} />
-              ))}
-            </div>
-            <span className="text-zinc-600 text-xs ml-auto">{step + 1}/{batches.length}</span>
-          </div>
-
-          {currentBatch && (() => {
-            if (currentBatch.type === 'dice') {
-              const entries = Object.entries(currentBatch.zones)
-              return (
-                <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 animate-pulse">
-                  <p className="text-red-400 text-xs font-bold mb-2 text-center">🎲 주사위 결과</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {entries.map(([zone, cnt]) => (
-                      <div key={zone} className="bg-zinc-900/80 rounded-lg px-2 py-2 text-center">
-                        <p className="text-zinc-400 text-[10px] leading-tight">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</p>
-                        <p className="text-red-300 font-bold text-xl leading-tight">+{cnt}</p>
-                        <p className="text-[10px] leading-none">🧟</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            }
-            if (currentBatch.type === 'crowded') {
-              return (
-                <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 text-center animate-pulse">
-                  <p className="text-zinc-400 text-xs mb-1">👥 사람이 제일 많은 구역</p>
-                  <p className="text-white font-bold text-base">{ZONE_CONFIGS[currentBatch.zone].displayName}</p>
-                  <p className="text-red-300 text-2xl mt-1">🧟 +1</p>
-                </div>
-              )
-            }
-            if (currentBatch.type === 'belle') {
-              return (
-                <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 text-center animate-pulse">
-                  <p className="text-zinc-400 text-xs mb-1">💄 미녀가 제일 많은 구역</p>
-                  <p className="text-white font-bold text-base">{ZONE_CONFIGS[currentBatch.zone].displayName}</p>
-                  <p className="text-red-300 text-2xl mt-1">🧟 +1</p>
-                </div>
-              )
-            }
-            if (currentBatch.type === 'zombie_player') {
-              const pName = players[currentBatch.playerId]?.nickname ?? currentBatch.playerId
-              return (
-                <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 text-center animate-pulse">
-                  <p className="text-red-400 text-xs font-bold mb-1">🧟 좀비 플레이어 등장</p>
-                  <p className="text-white font-bold text-base">{ZONE_CONFIGS[currentBatch.zone].displayName}</p>
-                  <p className="text-zinc-400 text-xs mt-1">{pName}님이 나타났습니다</p>
-                </div>
-              )
-            }
-            return null
-          })()}
-        </div>
+        <p className="text-zinc-500 text-sm text-center animate-pulse">🧟 좀비 배치 중...</p>
       )
     }
 
