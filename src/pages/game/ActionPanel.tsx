@@ -863,21 +863,26 @@ export default function ActionPanel({
       }
 
       const drawCount = preview.length
-      const allOtherPlayers = game!.playerOrder.filter(id => id !== uid)
+      const aliveOtherPlayers = game!.playerOrder.filter(id =>
+        id !== uid && Object.values(game!.characters).some(c => c.playerId === id && c.isAlive)
+      )
+      const hasNoOtherPlayers = aliveOtherPlayers.length === 0
       const truckReturned = drawCount === 3
         ? preview.find(id => id !== truckKept && id !== truckGiven) ?? null
         : null
       const canSubmit = drawCount === 1
         ? true
-        : drawCount === 2
-          ? truckKept !== null && truckGiven !== null && truckGivenTo !== null && truckKept !== truckGiven
+        : hasNoOtherPlayers
+          ? truckKept !== null
           : truckKept !== null && truckGiven !== null && truckGivenTo !== null && truckKept !== truckGiven
 
       const subtitle = drawCount === 1
         ? '트럭에 1장만 남았습니다 — 자동 획득'
-        : drawCount === 2
-          ? '1장 보관 · 1장 증정'
-          : '1장 보관 · 1장 증정 · 1장 반환'
+        : hasNoOtherPlayers
+          ? `1장 보관 · 나머지 ${drawCount - 1}장 반환 (증정할 플레이어 없음)`
+          : drawCount === 2
+            ? '1장 보관 · 1장 증정'
+            : '1장 보관 · 1장 증정 · 1장 반환'
 
       async function handleTruckSubmit() {
         if (!canSubmit || !preview) return
@@ -887,6 +892,10 @@ export default function ActionPanel({
         try {
           if (drawCount === 1) {
             await submitItemSearchChoice(roomCode, kept)
+          } else if (hasNoOtherPlayers) {
+            // 증정할 플레이어 없음 → 보관 1장 외 모두 덱 반환
+            const nonKept = preview.filter(id => id !== kept)
+            await submitItemSearchChoice(roomCode, kept, undefined, nonKept[0], nonKept[1])
           } else if (drawCount === 2 && truckGiven && truckGivenTo) {
             await submitItemSearchChoice(roomCode, kept, truckGivenTo, truckGiven)
           } else if (drawCount === 3 && truckGiven && truckGivenTo && truckReturned) {
@@ -947,14 +956,16 @@ export default function ActionPanel({
                         }`}>
                         보관
                       </button>
-                      <button
-                        onClick={() => { setTruckGiven(instanceId); if (truckKept === instanceId) setTruckKept(null) }}
-                        className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                          isGiven ? 'bg-blue-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
-                        }`}>
-                        증정
-                      </button>
-                      {isReturned && (
+                      {!hasNoOtherPlayers && (
+                        <button
+                          onClick={() => { setTruckGiven(instanceId); if (truckKept === instanceId) setTruckKept(null) }}
+                          className={`text-xs px-2 py-1 rounded-lg transition-colors ${
+                            isGiven ? 'bg-blue-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+                          }`}>
+                          증정
+                        </button>
+                      )}
+                      {(isReturned || (hasNoOtherPlayers && !isKept)) && (
                         <span className="text-xs text-zinc-500 px-2 py-1">반환 예정</span>
                       )}
                     </div>
@@ -964,11 +975,11 @@ export default function ActionPanel({
             </div>
           )}
 
-          {drawCount >= 2 && truckGiven && (
+          {drawCount >= 2 && truckGiven && !hasNoOtherPlayers && (
             <div className="mb-4">
               <p className="text-zinc-400 text-xs mb-2">증정할 플레이어 선택</p>
               <div className="flex flex-wrap gap-2">
-                {allOtherPlayers.map(pid => (
+                {aliveOtherPlayers.map(pid => (
                   <button key={pid}
                     onClick={() => setTruckGivenTo(pid)}
                     className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${

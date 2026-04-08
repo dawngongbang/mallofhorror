@@ -285,17 +285,20 @@ export async function hostResolveItemSearch(
   const winnerItems = await getPrivateItems(roomCode, winnerId)
   await writePrivateItems(roomCode, winnerId, [...winnerItems, keptInstanceId])
 
-  // 증정 (2장 이상일 때)
+  // 증정 (증정 대상이 있을 때)
   if (givenToPlayerId && givenInstanceId) {
     const recipientItems = await getPrivateItems(roomCode, givenToPlayerId)
     await writePrivateItems(roomCode, givenToPlayerId, [...recipientItems, givenInstanceId])
   }
 
-  // 반환 (3장일 때)
+  // 반환: returnedInstanceId + 증정 대상 없이 givenInstanceId만 있는 경우 모두 덱에 추가
   let newDeck = [...state.itemDeck]
-  if (returnedInstanceId) {
-    const returnedItemId = returnedInstanceId.split('_').slice(0, -1).join('_') as import('../engine/types').ItemId
-    newDeck = [...newDeck, { instanceId: returnedInstanceId, itemId: returnedItemId }]
+  const toReturn: string[] = []
+  if (returnedInstanceId) toReturn.push(returnedInstanceId)
+  if (givenInstanceId && !givenToPlayerId) toReturn.push(givenInstanceId)
+  for (const instId of toReturn) {
+    const itemId = instId.split('_').slice(0, -1).join('_') as import('../engine/types').ItemId
+    newDeck = [...newDeck, { instanceId: instId, itemId }]
   }
 
   const newCounts = { ...state.playerItemCounts, [winnerId]: (state.playerItemCounts[winnerId] ?? 0) + 1 }
