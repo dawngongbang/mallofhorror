@@ -376,6 +376,14 @@ export interface GameSettings {
   // disabled:    sprint/hidden은 이동 페이즈 전용으로만 사용
 }
 
+// ── 관전자 ──────────────────────────────────────────────────
+
+export interface Spectator {
+  id: string
+  nickname: string
+  joinedAt: number
+}
+
 // ── 방 메타 ──────────────────────────────────────────────────
 
 export interface RoomMeta {

@@ -68,6 +68,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
+  // 관전자: playerOrder에 없는 uid (게임 시작 후 변하지 않음)
+  const isSpectator = !!uid && !!game && !game.playerOrder.includes(uid)
 
   // 게임 페이지 진입 시 줌 잠금, 이탈 시 복원
   useEffect(() => {
@@ -809,7 +811,9 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
           {/* 액션 패널 */}
           <div className="mt-3 bg-zinc-900 rounded-2xl p-3">
-            <ActionPanel
+            {isSpectator ? (
+              <p className="text-zinc-600 text-xs text-center py-1">👁 관전 중 — 게임에 참여하지 않습니다</p>
+            ) : <ActionPanel
               game={game}
               players={players}
               uid={uid}
@@ -835,7 +839,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               setupDiceTopReady={setupDiceTopReady}
               onLeave={onLeave}
               myItemIds={myItemIds}
-            />
+            />}
           </div>
 
 

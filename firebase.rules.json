@@ -154,6 +154,13 @@
           }
         },
 
+        "spectators": {
+          ".read": true,
+          "$spectatorId": {
+            ".write": "auth.uid === $spectatorId"
+          }
+        },
+
         "chat": {
           ".read": true,
           "$messageId": {

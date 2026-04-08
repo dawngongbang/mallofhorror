@@ -10,7 +10,7 @@ import {
 } from 'firebase/database'
 import { db } from './config'
 import { getCurrentUid } from './auth'
-import type { RoomMeta, Player, GameSettings, PlayerColor } from '../engine/types'
+import type { RoomMeta, Player, GameSettings, PlayerColor, Spectator } from '../engine/types'
 import { DEFAULT_SETTINGS } from '../engine/constants'
 
 const ALL_COLORS: PlayerColor[] = ['red', 'blue', 'green', 'yellow', 'purple', 'orange']
@@ -112,6 +112,96 @@ export async function joinRoom(
   }
 
   await set(ref(db, `games/${roomCode}/players/${uid}`), player)
+}
+
+// ── 관전자 입장 ───────────────────────────────────────────────
+
+export async function joinAsSpectator(
+  roomCode: string,
+  nickname: string,
+): Promise<RoomMeta['status']> {
+  const uid = getCurrentUid()
+  if (!uid) throw new Error('로그인이 필요합니다.')
+
+  const metaSnap = await get(ref(db, `games/${roomCode}/meta`))
+  if (!metaSnap.exists()) throw new Error('존재하지 않는 방입니다.')
+
+  const meta = metaSnap.val() as RoomMeta
+
+  const spectator: Spectator = { id: uid, nickname, joinedAt: Date.now() }
+  await set(ref(db, `games/${roomCode}/spectators/${uid}`), spectator)
+
+  return meta.status
+}
+
+export async function leaveSpectator(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) return
+  await remove(ref(db, `games/${roomCode}/spectators/${uid}`))
+}
+
+export async function switchToPlayer(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) throw new Error('로그인이 필요합니다.')
+
+  const [metaSnap, playersSnap, specSnap] = await Promise.all([
+    get(ref(db, `games/${roomCode}/meta`)),
+    get(ref(db, `games/${roomCode}/players`)),
+    get(ref(db, `games/${roomCode}/spectators/${uid}`)),
+  ])
+
+  const meta = metaSnap.val() as RoomMeta
+  const players = playersSnap.val() as Record<string, Player> | null
+  const playerCount = players ? Object.keys(players).length : 0
+  if (playerCount >= meta.settings.playerCount) throw new Error('방이 가득 찼습니다.')
+
+  const spec = specSnap.val() as Spectator | null
+  const usedColors = players ? Object.values(players).map(p => p.color) : []
+  const color = pickAvailableColor(usedColors)
+
+  const player: Player = {
+    id: uid,
+    nickname: spec?.nickname ?? '플레이어',
+    color,
+    isReady: false,
+    isConnected: true,
+    lastSeen: Date.now(),
+    characterIds: [],
+    itemIds: [],
+  }
+
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/players/${uid}`), player),
+    remove(ref(db, `games/${roomCode}/spectators/${uid}`)),
+  ])
+}
+
+export async function switchToSpectator(roomCode: string): Promise<void> {
+  const uid = getCurrentUid()
+  if (!uid) throw new Error('로그인이 필요합니다.')
+
+  const playerSnap = await get(ref(db, `games/${roomCode}/players/${uid}`))
+  const player = playerSnap.val() as Player | null
+
+  const spectator: Spectator = {
+    id: uid,
+    nickname: player?.nickname ?? '관전자',
+    joinedAt: Date.now(),
+  }
+
+  await Promise.all([
+    set(ref(db, `games/${roomCode}/spectators/${uid}`), spectator),
+    remove(ref(db, `games/${roomCode}/players/${uid}`)),
+  ])
+}
+
+export function subscribeToSpectators(
+  roomCode: string,
+  callback: (spectators: Record<string, Spectator>) => void,
+): () => void {
+  const specRef = ref(db, `games/${roomCode}/spectators`)
+  onValue(specRef, snap => callback(snap.val() ?? {}))
+  return () => off(specRef)
 }
 
 // ── 색상 변경 ─────────────────────────────────────────────

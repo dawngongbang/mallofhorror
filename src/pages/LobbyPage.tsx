@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { createRoom, joinRoom } from '../firebase/roomService'
+import { createRoom, joinRoom, joinAsSpectator } from '../firebase/roomService'
 import RulesModal from '../components/RulesModal'
 
 interface Props {
-  onEnterRoom: (roomCode: string) => void
+  onEnterRoom: (roomCode: string, goToGame?: boolean) => void
 }
 
 export default function LobbyPage({ onEnterRoom }: Props) {
@@ -11,6 +11,7 @@ export default function LobbyPage({ onEnterRoom }: Props) {
   const [nickname, setNickname] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [isTestMode, setIsTestMode] = useState(false)
+  const [isSpectator, setIsSpectator] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showRules, setShowRules] = useState(false)
@@ -32,9 +33,16 @@ export default function LobbyPage({ onEnterRoom }: Props) {
     if (!nickname.trim()) { setError('닉네임을 입력해주세요.'); return }
     if (!joinCode.trim()) { setError('방 코드를 입력해주세요.'); return }
     setLoading(true); setError('')
+    const code = joinCode.trim().toUpperCase()
     try {
-      await joinRoom(joinCode.trim().toUpperCase(), nickname.trim())
-      onEnterRoom(joinCode.trim().toUpperCase())
+      if (isSpectator) {
+        const status = await joinAsSpectator(code, nickname.trim())
+        // 이미 플레이 중이면 바로 게임 화면으로
+        onEnterRoom(code, status === 'playing')
+      } else {
+        await joinRoom(code, nickname.trim())
+        onEnterRoom(code)
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -93,6 +101,15 @@ export default function LobbyPage({ onEnterRoom }: Props) {
               maxLength={6}
               className="w-full bg-zinc-800 text-white rounded-lg px-4 py-2.5 text-sm mb-4 outline-none focus:ring-2 focus:ring-red-500 placeholder:text-zinc-600 tracking-widest font-mono"
             />
+            <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isSpectator}
+                onChange={e => setIsSpectator(e.target.checked)}
+                className="w-4 h-4 rounded accent-zinc-400"
+              />
+              <span className="text-xs text-zinc-500">👁 관전자로 입장 <span className="text-zinc-600">(게임 중인 방도 가능)</span></span>
+            </label>
           </>
         )}
 

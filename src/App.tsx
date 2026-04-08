@@ -150,7 +150,9 @@ export default function App() {
 
   return (
     <>
-      <LobbyPage onEnterRoom={(roomCode) => go({ screen: 'waiting', roomCode })} />
+      <LobbyPage onEnterRoom={(roomCode, goToGame) =>
+        go(goToGame ? { screen: 'game', roomCode } : { screen: 'waiting', roomCode })
+      } />
       <ErrorOverlay />
     </>
   )
