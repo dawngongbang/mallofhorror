@@ -17,6 +17,7 @@ import ZoneBoard from './game/ZoneBoard'
 import ActionPanel from './game/ActionPanel'
 import VoteOverlay from './game/VoteOverlay'
 import TruckSearchOverlay from './game/TruckSearchOverlay'
+import DiceOverlay from './game/DiceOverlay'
 import PlayerSidebar, { MobilePlayerList } from './game/PlayerSidebar'
 import {
   PHASE_LABEL, CHAR_ICON, ITEM_CATEGORY,
@@ -68,6 +69,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [showVoteOverlay, setShowVoteOverlay] = useState(false)
   // 트럭 수색 오버레이
   const [showTruckOverlay, setShowTruckOverlay] = useState(false)
+  // 주사위 오버레이
+  const [showDiceOverlay, setShowDiceOverlay] = useState(false)
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -97,6 +100,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   // 투표 페이즈 진입 시 오버레이 자동 표시
   useEffect(() => {
     if (game?.phase === 'voting') setShowVoteOverlay(true)
+  }, [game?.phase])
+
+  // 주사위 페이즈 진입 시 오버레이 자동 표시
+  useEffect(() => {
+    if (game?.phase === 'roll_dice' || game?.phase === 'dice_reveal') setShowDiceOverlay(true)
+    else setShowDiceOverlay(false)
   }, [game?.phase])
 
   // 트럭 수색 아이템 선택 진입 시 오버레이 자동 표시
@@ -549,6 +558,25 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               )
             })()}
 
+            {/* 주사위 오버레이 */}
+            {(game.phase === 'roll_dice' || game.phase === 'dice_reveal') && showDiceOverlay && (
+              <DiceOverlay
+                game={game}
+                players={players}
+                uid={uid}
+                roomCode={roomCode}
+                actionLoading={actionLoading}
+                setActionLoading={setActionLoading}
+                onShowMap={() => setShowDiceOverlay(false)}
+              />
+            )}
+            {(game.phase === 'roll_dice' || game.phase === 'dice_reveal') && !showDiceOverlay && (
+              <button
+                onClick={() => setShowDiceOverlay(true)}
+                className="absolute top-2 right-2 z-30 bg-zinc-700/90 hover:bg-zinc-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transition-colors animate-pulse">
+                🎲 주사위
+              </button>
+            )}
             {/* 투표 오버레이 */}
             {game.phase === 'voting' && showVoteOverlay && (
               <VoteOverlay

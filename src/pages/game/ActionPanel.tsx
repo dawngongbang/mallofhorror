@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   patchGameState,
-  submitSheriffRollRequest,
   submitWeaponConfirm,
   submitWeaponUsePass,
-  submitZombiePlayerZoneChoice,
 } from '../../firebase/gameService'
 import { rollAndGetPlacementOptions } from '../../engine/setup'
 import { determineSurvivorEvent } from '../../engine/event'
@@ -72,27 +70,6 @@ export default function ActionPanel({
   onLeave,
   myItemIds,
 }: ActionPanelProps) {
-  // 주사위 애니메이션 state (좀비 주사위)
-  const [diceAnim, setDiceAnim] = useState<number[] | null>(null)
-  const lastDiceKey = useRef('')
-
-  useEffect(() => {
-    if (game?.phase !== 'dice_reveal' || !game.lastDiceRoll || uid !== game.playerOrder[game.sheriffIndex]) return
-    const key = game.lastDiceRoll.dice.join(',')
-    if (lastDiceKey.current === key) return
-    lastDiceKey.current = key
-    const real = game.lastDiceRoll.dice
-    let tick = 0
-    setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
-    const timer = setInterval(() => {
-      tick++
-      if (tick >= 14) { clearInterval(timer); setDiceAnim(null) }
-      else setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
-    }, 80)
-    return () => clearInterval(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.phase, game?.lastDiceRoll])
-
   // 초기배치 주사위 애니메이션
   const [setupDiceAnim, setSetupDiceAnim] = useState<[number, number] | null>(null)
   const lastSetupDiceKey = useRef('')
@@ -115,7 +92,6 @@ export default function ActionPanel({
   }, [game?.setupDiceRoll])
 
   // Derived values
-  const sheriffId = game.playerOrder[game.sheriffIndex]
   const currentSetupPlayerId = game.setupPlacementOrder[0] ?? null
   const isMyTurnToPlace = currentSetupPlayerId === uid
 
@@ -145,12 +121,7 @@ export default function ActionPanel({
     } finally { setActionLoading(false) }
   }
 
-  async function handleRollDice() {
-    if (!game || actionLoading) return
-    setActionLoading(true)
-    try { await submitSheriffRollRequest(roomCode) }
-    finally { setActionLoading(false) }
-  }
+
 
   async function handleWeaponConfirm() {
     if (actionLoading) return
@@ -278,146 +249,11 @@ export default function ActionPanel({
       )
     }
 
-    // ── 주사위 결과 공개 ────────────────────────────────────
-    case 'dice_reveal': {
-      const isZombiePlayerDR = uid ? Object.values(game!.characters)
-        .filter(c => c.playerId === uid).length > 0
-        && Object.values(game!.characters)
-        .filter(c => c.playerId === uid).every(c => !c.isAlive)
-        : false
-      const myZombieChoiceDR = uid ? (game!.zombiePlayerZoneChoices ?? {})[uid] : undefined
-      const zombieSelectorDR = isZombiePlayerDR && !myZombieChoiceDR && (
-        <div className="mt-3">
-          <p className="text-red-400 text-xs font-bold mb-1">🧟 나타날 구역을 선택하세요!</p>
-          <div className="flex flex-wrap gap-1 justify-center">
-            {(Object.keys(game!.zones) as ZoneName[])
-              .filter(z => !game!.zones[z].isClosed)
-              .map(z => (
-                <button key={z} onClick={async () => {
-                  setActionLoading(true)
-                  try { await submitZombiePlayerZoneChoice(roomCode, z) }
-                  finally { setActionLoading(false) }
-                }} disabled={actionLoading}
-                  className="text-xs bg-zinc-700 hover:bg-red-800 text-zinc-300 hover:text-white px-2 py-1 rounded transition-colors">
-                  {ZONE_CONFIGS[z].displayName}
-                </button>
-              ))}
-          </div>
-        </div>
-      )
-
-      if (uid !== sheriffId || !game!.isRealSheriff) {
-        const isZombiePlayerDR2 = uid ? Object.values(game!.characters)
-          .filter(c => c.playerId === uid).length > 0
-          && Object.values(game!.characters)
-          .filter(c => c.playerId === uid).every(c => !c.isAlive)
-          : false
-        const roll2 = game!.lastDiceRoll
-        return (
-          <div className="text-center">
-            <p className="text-zinc-400 text-sm">보안관이 주사위 결과를 확인 중...</p>
-            {/* 사망자는 좀비 배치 위치를 미리 확인 가능 */}
-            {isZombiePlayerDR2 && roll2 && (
-              <div className="mt-2 mb-2">
-                <p className="text-red-400 text-xs font-bold mb-1">🧟 이번 라운드 좀비 배치</p>
-                <div className="flex flex-wrap justify-center gap-1">
-                  {Object.entries(roll2.zombiesByZone).map(([zone, count]) => (
-                    <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg text-xs">
-                      <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
-                      <span className="text-red-400 ml-1">+{count}🧟</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-zinc-600 text-xs mt-1">잠시 후 이동 페이즈가 시작됩니다</p>
-            {zombieSelectorDR}
-          </div>
-        )
-      }
-      const roll = game!.lastDiceRoll
-      if (!roll) return <p className="text-zinc-400 text-sm">주사위 결과 로딩 중...</p>
-      return (
-        <div className="text-center">
-          <p className="text-sm font-bold text-white mb-3">🎲 주사위 결과 (보안관만 확인 가능)</p>
-          <div className="flex justify-center gap-2 mb-3">
-            {(diceAnim ?? roll.dice).map((d, i) => (
-              <div key={`${i}-${d}`} className="dice-roll w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">
-                {d}
-              </div>
-            ))}
-          </div>
-          {!diceAnim && (
-            <>
-              <div className="flex flex-wrap justify-center gap-2 mb-3 text-sm">
-                {Object.entries(roll.zombiesByZone).map(([zone, count]) => (
-                  <span key={zone} className="bg-zinc-800 px-2 py-1 rounded-lg">
-                    <span className="text-yellow-400">{ZONE_CONFIGS[zone as ZoneName]?.displayName}</span>
-                    <span className="text-red-400 ml-1">+{count}🧟</span>
-                  </span>
-                ))}
-              </div>
-              <p className="text-zinc-500 text-xs">보너스 좀비(사람/미녀 최다)는 이동 완료 후 결정됩니다</p>
-              <p className="text-zinc-600 text-xs mt-3">잠시 후 이동 페이즈가 시작됩니다...</p>
-            </>
-          )}
-          {zombieSelectorDR}
-        </div>
-      )
-    }
-
-    // ── 주사위 (2라운드~) ────────────────────────────────────
+    // ── 주사위 결과 공개 / 주사위 굴리기 (맵 위 DiceOverlay에서 처리) ──
+    case 'dice_reveal':
     case 'roll_dice': {
-      const isSheriff = uid === sheriffId
-      const isZombiePlayer = uid ? Object.values(game!.characters)
-        .filter(c => c.playerId === uid).length > 0
-        && Object.values(game!.characters)
-        .filter(c => c.playerId === uid).every(c => !c.isAlive)
-        : false
-      const myZombieChoice = uid ? (game!.zombiePlayerZoneChoices ?? {})[uid] : undefined
-
-      const zombieZoneSelector = isZombiePlayer && (
-        <div className="mt-3">
-          <p className="text-red-400 text-xs font-bold mb-1">🧟 좀비가 된 당신! 나타날 구역을 선택하세요.</p>
-          {myZombieChoice ? (
-            <p className="text-green-400 text-xs">✓ {ZONE_CONFIGS[myZombieChoice]?.displayName} 선택 완료</p>
-          ) : (
-            <div className="flex flex-wrap gap-1 justify-center">
-              {(Object.keys(game!.zones) as ZoneName[])
-                .filter(z => !game!.zones[z].isClosed)
-                .map(z => (
-                  <button key={z} onClick={async () => {
-                    setActionLoading(true)
-                    try { await submitZombiePlayerZoneChoice(roomCode, z) }
-                    finally { setActionLoading(false) }
-                  }} disabled={actionLoading}
-                    className="text-xs bg-zinc-700 hover:bg-red-800 text-zinc-300 hover:text-white px-2 py-1 rounded transition-colors">
-                    {ZONE_CONFIGS[z].displayName}
-                  </button>
-                ))}
-            </div>
-          )}
-        </div>
-      )
-
-      if (!isSheriff) {
-        return (
-          <div className="text-center">
-            <p className="text-zinc-400 text-sm">
-              보안관 <span className="text-white font-bold">{players[sheriffId]?.nickname}</span>이 주사위를 굴리는 중...
-            </p>
-            {zombieZoneSelector}
-          </div>
-        )
-      }
       return (
-        <div className="text-center">
-          <button onClick={handleRollDice} disabled={actionLoading}
-            className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
-            {actionLoading ? '처리 중...' : '🎲 좀비 주사위 굴리기'}
-          </button>
-          {zombieZoneSelector}
-        </div>
+        <p className="text-zinc-500 text-sm text-center animate-pulse">🎲 주사위 진행 중...</p>
       )
     }
 
