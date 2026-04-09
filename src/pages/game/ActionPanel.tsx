@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   patchGameState,
-  submitItemSearchChoice,
   submitSheriffRollRequest,
   submitWeaponConfirm,
   submitWeaponUsePass,
@@ -14,7 +13,7 @@ import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_T
 import { isZoneFull } from '../../engine/dice'
 import type { GameState, Player, ZoneName } from '../../engine/types'
 import {
-  instanceIdToItemId, PHASE_LABEL, COLOR_BG, ITEM_CATEGORY,
+  PHASE_LABEL, COLOR_BG,
 } from './constants'
 
 
@@ -73,11 +72,6 @@ export default function ActionPanel({
   onLeave,
   myItemIds,
 }: ActionPanelProps) {
-  // Truck search local state (owned here — not read by hand cards)
-  const [truckKept, setTruckKept] = useState<string | null>(null)
-  const [truckGiven, setTruckGiven] = useState<string | null>(null)
-  const [truckGivenTo, setTruckGivenTo] = useState<string | null>(null)
-
   // 주사위 애니메이션 state (좀비 주사위)
   const [diceAnim, setDiceAnim] = useState<number[] | null>(null)
   const lastDiceKey = useRef('')
@@ -775,168 +769,20 @@ export default function ActionPanel({
       )
     }
 
-    // ── 이벤트 처리 / 트럭 수색 선택 ────────────────────────
+    // ── 이벤트 처리 / 트럭 수색 (맵 위 TruckSearchOverlay에서 처리) ──
     case 'event': {
       const preview = game!.itemSearchPreview
       const winnerId = game!.itemSearchWinnerId
-      if (!preview || !winnerId) {
-        return <p className="text-zinc-500 text-xs">이벤트 처리 중...</p>
-      }
-
-      const isWinner = uid === winnerId
-      const winnerName = players[winnerId]?.nickname ?? '?'
-
-      if (!isWinner) {
+      if (preview && winnerId) {
+        const isWinner = uid === winnerId
+        const winnerName = players[winnerId]?.nickname ?? '?'
         return (
-          <div className="text-center">
-            <p className="text-lg mb-1">🚚</p>
-            <p className="text-zinc-300 text-sm">
-              <span className="font-bold text-white">{winnerName}</span>님이 트럭을 수색 중입니다...
-            </p>
-          </div>
+          <p className="text-zinc-500 text-sm text-center animate-pulse">
+            {isWinner ? '🚚 맵에서 아이템을 선택하세요' : `🚚 ${winnerName}님이 트럭을 수색 중...`}
+          </p>
         )
       }
-
-      const drawCount = preview.length
-      const aliveOtherPlayers = game!.playerOrder.filter(id =>
-        id !== uid && Object.values(game!.characters).some(c => c.playerId === id && c.isAlive)
-      )
-      const hasNoOtherPlayers = aliveOtherPlayers.length === 0
-      const truckReturned = drawCount === 3
-        ? preview.find(id => id !== truckKept && id !== truckGiven) ?? null
-        : null
-      const canSubmit = drawCount === 1
-        ? true
-        : hasNoOtherPlayers
-          ? truckKept !== null
-          : truckKept !== null && truckGiven !== null && truckGivenTo !== null && truckKept !== truckGiven
-
-      const subtitle = drawCount === 1
-        ? '트럭에 1장만 남았습니다 — 자동 획득'
-        : hasNoOtherPlayers
-          ? `1장 보관 · 나머지 ${drawCount - 1}장 반환 (증정할 플레이어 없음)`
-          : drawCount === 2
-            ? '1장 보관 · 1장 증정'
-            : '1장 보관 · 1장 증정 · 1장 반환'
-
-      async function handleTruckSubmit() {
-        if (!canSubmit || !preview) return
-        const kept = drawCount === 1 ? preview[0] : truckKept
-        if (!kept) return
-        setActionLoading(true)
-        try {
-          if (drawCount === 1) {
-            await submitItemSearchChoice(roomCode, kept)
-          } else if (hasNoOtherPlayers) {
-            // 증정할 플레이어 없음 → 보관 1장 외 모두 덱 반환
-            const nonKept = preview.filter(id => id !== kept)
-            await submitItemSearchChoice(roomCode, kept, undefined, nonKept[0], nonKept[1])
-          } else if (drawCount === 2 && truckGiven && truckGivenTo) {
-            await submitItemSearchChoice(roomCode, kept, truckGivenTo, truckGiven)
-          } else if (drawCount === 3 && truckGiven && truckGivenTo && truckReturned) {
-            await submitItemSearchChoice(roomCode, kept, truckGivenTo, truckGiven, truckReturned)
-          }
-          setTruckKept(null); setTruckGiven(null); setTruckGivenTo(null)
-        } finally {
-          setActionLoading(false)
-        }
-      }
-
-      return (
-        <div>
-          <p className="text-white text-sm font-bold mb-1">🚚 트럭 수색</p>
-          <p className="text-zinc-400 text-xs mb-3">{subtitle}</p>
-
-          {drawCount === 1 && (() => {
-            const instanceId = preview[0]
-            const itemId = instanceIdToItemId(instanceId)
-            const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
-            return (
-              <div className="bg-green-900/40 border border-green-600 rounded-xl p-3 mb-4 flex items-center gap-3">
-                <span className="text-2xl">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
-                <div>
-                  <p className="text-white text-sm font-medium">{cfg?.name ?? itemId}</p>
-                  <p className="text-zinc-400 text-xs">{cfg?.description ?? ''}</p>
-                </div>
-              </div>
-            )
-          })()}
-
-          {drawCount >= 2 && (
-            <div className="flex flex-col gap-2 mb-4">
-              {preview.map(instanceId => {
-                const itemId = instanceIdToItemId(instanceId)
-                const cfg = ITEM_CONFIGS[itemId as keyof typeof ITEM_CONFIGS]
-                const isKept = truckKept === instanceId
-                const isGiven = truckGiven === instanceId
-                const isReturned = drawCount === 3 && !isKept && !isGiven
-                return (
-                  <div key={instanceId} className={`rounded-xl p-3 border transition-colors ${
-                    isKept ? 'bg-green-900/50 border-green-500' :
-                    isGiven ? 'bg-blue-900/50 border-blue-500' :
-                    'bg-zinc-800 border-zinc-700'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xl">{ITEM_CATEGORY[itemId] ?? '📦'}</span>
-                      <div>
-                        <p className="text-white text-sm font-medium">{cfg?.name ?? itemId}</p>
-                        <p className="text-zinc-400 text-xs">{cfg?.description ?? ''}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setTruckKept(instanceId); if (truckGiven === instanceId) setTruckGiven(null) }}
-                        className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                          isKept ? 'bg-green-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
-                        }`}>
-                        보관
-                      </button>
-                      {!hasNoOtherPlayers && (
-                        <button
-                          onClick={() => { setTruckGiven(instanceId); if (truckKept === instanceId) setTruckKept(null) }}
-                          className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                            isGiven ? 'bg-blue-600 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
-                          }`}>
-                          증정
-                        </button>
-                      )}
-                      {(isReturned || (hasNoOtherPlayers && !isKept)) && (
-                        <span className="text-xs text-zinc-500 px-2 py-1">반환 예정</span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {drawCount >= 2 && truckGiven && !hasNoOtherPlayers && (
-            <div className="mb-4">
-              <p className="text-zinc-400 text-xs mb-2">증정할 플레이어 선택</p>
-              <div className="flex flex-wrap gap-2">
-                {aliveOtherPlayers.map(pid => (
-                  <button key={pid}
-                    onClick={() => setTruckGivenTo(pid)}
-                    className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                      truckGivenTo === pid
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
-                    }`}>
-                    {players[pid]?.nickname ?? pid}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={handleTruckSubmit}
-            disabled={!canSubmit || actionLoading}
-            className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-semibold py-2 rounded-xl text-sm transition-colors">
-            {actionLoading ? '처리 중...' : '확정'}
-          </button>
-        </div>
-      )
+      return <p className="text-zinc-500 text-xs">이벤트 처리 중...</p>
     }
 
     // ── 투표 (맵 위 VoteOverlay에서 처리) ──────────────────────

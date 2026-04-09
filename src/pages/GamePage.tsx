@@ -16,6 +16,7 @@ import { useHostLogic } from '../hooks/useHostLogic'
 import ZoneBoard from './game/ZoneBoard'
 import ActionPanel from './game/ActionPanel'
 import VoteOverlay from './game/VoteOverlay'
+import TruckSearchOverlay from './game/TruckSearchOverlay'
 import PlayerSidebar, { MobilePlayerList } from './game/PlayerSidebar'
 import {
   PHASE_LABEL, CHAR_ICON, ITEM_CATEGORY,
@@ -65,6 +66,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const lastSetupDiceTopKey = useRef('')
   // 투표 오버레이: 투표 페이즈 진입 시 자동 표시, 사용자가 '맵 보기' 누르면 숨김
   const [showVoteOverlay, setShowVoteOverlay] = useState(false)
+  // 트럭 수색 오버레이
+  const [showTruckOverlay, setShowTruckOverlay] = useState(false)
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -95,6 +98,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   useEffect(() => {
     if (game?.phase === 'voting') setShowVoteOverlay(true)
   }, [game?.phase])
+
+  // 트럭 수색 아이템 선택 진입 시 오버레이 자동 표시
+  useEffect(() => {
+    if (game?.itemSearchPreview) setShowTruckOverlay(true)
+    else setShowTruckOverlay(false)
+  }, [!!game?.itemSearchPreview])
 
   // 페이즈 전환 시 hoveredZone 초기화 (이전 페이즈 하이라이트 잔재 방지)
   useEffect(() => {
@@ -558,6 +567,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 onClick={() => setShowVoteOverlay(true)}
                 className="absolute top-2 right-2 z-30 bg-red-700/90 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transition-colors animate-pulse">
                 🗳️ 투표 보기
+              </button>
+            )}
+            {/* 트럭 수색 오버레이 */}
+            {game.itemSearchPreview && showTruckOverlay && (
+              <TruckSearchOverlay
+                game={game}
+                players={players}
+                uid={uid}
+                roomCode={roomCode}
+                actionLoading={actionLoading}
+                setActionLoading={setActionLoading}
+                onShowMap={() => setShowTruckOverlay(false)}
+              />
+            )}
+            {/* 트럭 수색 중 맵 보기 상태일 때 복귀 버튼 */}
+            {game.itemSearchPreview && !showTruckOverlay && (
+              <button
+                onClick={() => setShowTruckOverlay(true)}
+                className="absolute top-2 right-2 z-30 bg-yellow-700/90 hover:bg-yellow-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transition-colors animate-pulse">
+                🚚 트럭 수색
               </button>
             )}
             <ZoneBoard
