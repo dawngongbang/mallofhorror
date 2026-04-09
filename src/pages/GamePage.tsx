@@ -117,10 +117,18 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     else setShowSetupOverlay(false)
   }, [game?.phase, game?.setupPlacementOrder?.[0]])
 
-  // 초기 배치: 캐릭터 배치 완료 후 setupDiceRoll이 리셋되면 자동으로 재표시
+  // 초기 배치: 이동 애니메이션 종료 후 오버레이 재표시
+  // transitCharIds: 0→양수(애니 시작)→0(애니 종료) 흐름을 추적
+  const wasAnimatingSetup = useRef(false)
   useEffect(() => {
-    if (game?.phase === 'setup_place' && !game.setupDiceRoll) setShowSetupOverlay(true)
-  }, [game?.phase, game?.setupDiceRoll])
+    if (game?.phase !== 'setup_place') { wasAnimatingSetup.current = false; return }
+    if (transitCharIds.size > 0) {
+      wasAnimatingSetup.current = true
+    } else if (wasAnimatingSetup.current && !game.setupDiceRoll) {
+      wasAnimatingSetup.current = false
+      setShowSetupOverlay(true)
+    }
+  }, [game?.phase, game?.setupDiceRoll, transitCharIds.size])
 
   // 트럭 수색 아이템 선택 진입 시 오버레이 자동 표시
   useEffect(() => {
