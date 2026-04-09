@@ -192,11 +192,14 @@ export function useHostLogic(params: {
               ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenChars } : {}),
               ...(sprintAnnounce ? { lastSprintAnnounce: sprintAnnounce } : {}),
             })
-            const attackState = startZoneAttackPhase(zone, updatedGame, hardwareBonus)
+            const gameWithHidden = Object.keys(newHiddenChars).length > 0
+              ? { ...updatedGame, hiddenCharacters: newHiddenChars }
+              : updatedGame
+            const attackState = startZoneAttackPhase(zone, gameWithHidden, hardwareBonus)
             if (attackState) {
               await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
             } else {
-              const survivorState = startZoneSurvivorPhase(zone, updatedGame)
+              const survivorState = startZoneSurvivorPhase(zone, gameWithHidden)
               const revealAnnounce = hiddenEntries.length > 0
                 ? { type: 'reveal' as const, entries: hiddenEntries }
                 : null
@@ -390,13 +393,16 @@ export function useHostLogic(params: {
         ...(hideAnnounce ? { lastHideRevealAnnounce: hideAnnounce, hiddenCharacters: newHiddenCharsG } : {}),
         ...(sprintAnnounceG ? { lastSprintAnnounce: sprintAnnounceG } : {}),
       })
-      const attackState = startZoneAttackPhase(zone, updatedG, hardwareBonusG)
+      const gameWithHiddenG = Object.keys(newHiddenCharsG).length > 0
+        ? { ...updatedG, hiddenCharacters: newHiddenCharsG }
+        : updatedG
+      const attackState = startZoneAttackPhase(zone, gameWithHiddenG, hardwareBonusG)
       if (attackState) {
         await patchGameState(roomCode, { currentVote: attackState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
       }
       const revealAnnounce = hiddenEntries.length > 0 ? { type: 'reveal' as const, entries: hiddenEntries } : null
-      const survivorState = startZoneSurvivorPhase(zone, updatedG)
+      const survivorState = startZoneSurvivorPhase(zone, gameWithHiddenG)
       if (survivorState) {
         await patchGameState(roomCode, { currentVote: survivorState.currentVote, phase: 'voting', phaseDeadline: Date.now() + voteMs, lastZombieAttackResult: null })
         return
