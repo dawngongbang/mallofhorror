@@ -173,13 +173,11 @@ export default function ZoneBoard({
     const isSetupPlaceable = game!.phase === 'setup_place'
       && isMyTurnToPlace
       && !!game!.setupDiceRoll
-      && setupDiceTopReady
       && selectedIsUnplaced
       && setupZoneOptions.includes(zoneName)
     const isSetupInvalid = game!.phase === 'setup_place'
       && isMyTurnToPlace
       && !!game!.setupDiceRoll
-      && setupDiceTopReady
       && selectedIsUnplaced
       && !setupZoneOptions.includes(zoneName)
     const isHoveredSetup = hoveredZone === zoneName && isSetupPlaceable
