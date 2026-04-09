@@ -23,7 +23,6 @@ interface ZoneBoardProps {
   hoveredCharId: string | null
   setHoveredCharId: (id: string | null) => void
   selectedSetupCharId: string | null
-  setupDiceTopReady: boolean
   actionLoading: boolean
   setActionLoading: (v: boolean) => void
   pendingSetupFromPos: React.MutableRefObject<{ charId: string; pos: { x: number; y: number } } | null>
@@ -42,7 +41,6 @@ export default function ZoneBoard({
   hoveredCharId,
   setHoveredCharId,
   selectedSetupCharId,
-  setupDiceTopReady,
   actionLoading,
   setActionLoading,
   pendingSetupFromPos,
