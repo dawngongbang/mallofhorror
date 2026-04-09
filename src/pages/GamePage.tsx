@@ -111,11 +111,16 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     else setShowDiceOverlay(false)
   }, [game?.phase])
 
-  // 초기 배치 페이즈: 차례 바뀔 때마다 오버레이 자동 표시
+  // 초기 배치 페이즈: 진입/차례 변경 시 오버레이 표시
   useEffect(() => {
     if (game?.phase === 'setup_place') setShowSetupOverlay(true)
     else setShowSetupOverlay(false)
   }, [game?.phase, game?.setupPlacementOrder?.[0]])
+
+  // 초기 배치: 캐릭터 배치 완료 후 setupDiceRoll이 리셋되면 자동으로 재표시
+  useEffect(() => {
+    if (game?.phase === 'setup_place' && !game.setupDiceRoll) setShowSetupOverlay(true)
+  }, [game?.phase, game?.setupDiceRoll])
 
   // 트럭 수색 아이템 선택 진입 시 오버레이 자동 표시
   useEffect(() => {
