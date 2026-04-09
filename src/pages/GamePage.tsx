@@ -218,7 +218,11 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
   // ── 초기 배치 주사위 상단 바 구역 힌트 — 애니메이션 완료 후 표시 ──
   useEffect(() => {
-    if (!game?.setupDiceRoll) { setSetupDiceTopReady(false); return }
+    if (!game?.setupDiceRoll) {
+      lastSetupDiceTopKey.current = '' // null 시 초기화 → 같은 눈이 다시 나와도 재실행
+      setSetupDiceTopReady(false)
+      return
+    }
     const key = (game.setupDiceRoll as [number, number]).join(',')
     if (lastSetupDiceTopKey.current === key) return
     lastSetupDiceTopKey.current = key
