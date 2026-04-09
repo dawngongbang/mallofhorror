@@ -18,6 +18,7 @@ import ActionPanel from './game/ActionPanel'
 import VoteOverlay from './game/VoteOverlay'
 import TruckSearchOverlay from './game/TruckSearchOverlay'
 import DiceOverlay from './game/DiceOverlay'
+import SetupOverlay from './game/SetupOverlay'
 import PlayerSidebar, { MobilePlayerList } from './game/PlayerSidebar'
 import {
   PHASE_LABEL, CHAR_ICON, ITEM_CATEGORY,
@@ -71,6 +72,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [showTruckOverlay, setShowTruckOverlay] = useState(false)
   // 주사위 오버레이
   const [showDiceOverlay, setShowDiceOverlay] = useState(false)
+  // 초기 배치 오버레이
+  const [showSetupOverlay, setShowSetupOverlay] = useState(false)
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -107,6 +110,12 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     if (game?.phase === 'roll_dice' || game?.phase === 'dice_reveal') setShowDiceOverlay(true)
     else setShowDiceOverlay(false)
   }, [game?.phase])
+
+  // 초기 배치 페이즈: 차례 바뀔 때마다 오버레이 자동 표시
+  useEffect(() => {
+    if (game?.phase === 'setup_place') setShowSetupOverlay(true)
+    else setShowSetupOverlay(false)
+  }, [game?.phase, game?.setupPlacementOrder?.[0]])
 
   // 트럭 수색 아이템 선택 진입 시 오버레이 자동 표시
   useEffect(() => {
@@ -558,6 +567,26 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               )
             })()}
 
+            {/* 초기 배치 오버레이 */}
+            {game.phase === 'setup_place' && showSetupOverlay && (
+              <SetupOverlay
+                game={game}
+                players={players}
+                uid={uid}
+                roomCode={roomCode}
+                actionLoading={actionLoading}
+                setActionLoading={setActionLoading}
+                selectedSetupCharId={selectedSetupCharId}
+                onShowMap={() => setShowSetupOverlay(false)}
+              />
+            )}
+            {game.phase === 'setup_place' && !showSetupOverlay && (
+              <button
+                onClick={() => setShowSetupOverlay(true)}
+                className="absolute top-2 right-2 z-30 bg-zinc-700/90 hover:bg-zinc-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transition-colors animate-pulse">
+                🎲 배치 현황
+              </button>
+            )}
             {/* 주사위 오버레이 */}
             {(game.phase === 'roll_dice' || game.phase === 'dice_reveal') && showDiceOverlay && (
               <DiceOverlay
@@ -892,8 +921,6 @@ export default function GamePage({ roomCode, onLeave }: Props) {
               stagedHardwareItemId={stagedHardwareItemId}
               setStagedHardwareItemId={setStagedHardwareItemId}
               hoveredCharId={hoveredCharId}
-              selectedSetupCharId={selectedSetupCharId}
-              setupDiceTopReady={setupDiceTopReady}
               onLeave={onLeave}
               myItemIds={myItemIds}
             />}

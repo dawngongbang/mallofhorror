@@ -1,14 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
 import {
-  patchGameState,
   submitWeaponConfirm,
   submitWeaponUsePass,
 } from '../../firebase/gameService'
-import { rollAndGetPlacementOptions } from '../../engine/setup'
 import { determineSurvivorEvent } from '../../engine/event'
 import { calcDefense, isUnderAttack } from '../../engine/combat'
-import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS, DICE_TO_ZONE } from '../../engine/constants'
-import { isZoneFull } from '../../engine/dice'
+import { EVENT_ZONE_ORDER, ZONE_CONFIGS, CHARACTER_CONFIGS, ITEM_CONFIGS } from '../../engine/constants'
 import type { GameState, Player, ZoneName } from '../../engine/types'
 import {
   PHASE_LABEL, COLOR_BG,
@@ -39,9 +35,6 @@ interface ActionPanelProps {
   setStagedHardwareItemId: (id: string | null) => void
   // Hover state (shared with ZoneBoard via GamePage)
   hoveredCharId: string | null
-  // Additional state needed for setup_place panel
-  selectedSetupCharId: string | null
-  setupDiceTopReady: boolean
   onLeave: () => void
   myItemIds: string[]
 }
@@ -65,45 +58,10 @@ export default function ActionPanel({
   stagedSprintTargetZone,
   setStagedSprintTargetZone,
   stagedHardwareItemId,
-  selectedSetupCharId,
-  setupDiceTopReady,
   onLeave,
   myItemIds,
 }: ActionPanelProps) {
-  // 초기배치 주사위 애니메이션
-  const [setupDiceAnim, setSetupDiceAnim] = useState<[number, number] | null>(null)
-  const lastSetupDiceKey = useRef('')
-
-  useEffect(() => {
-    if (!game?.setupDiceRoll || game.setupPlacementOrder[0] !== uid) return
-    const d = game.setupDiceRoll as [number, number]
-    const key = d.join(',')
-    if (lastSetupDiceKey.current === key) return
-    lastSetupDiceKey.current = key
-    let tick = 0
-    setSetupDiceAnim([Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)])
-    const timer = setInterval(() => {
-      tick++
-      if (tick >= 12) { clearInterval(timer); setSetupDiceAnim(null) }
-      else setSetupDiceAnim([Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)])
-    }, 80)
-    return () => clearInterval(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.setupDiceRoll])
-
   // Derived values
-  const currentSetupPlayerId = game.setupPlacementOrder[0] ?? null
-  const isMyTurnToPlace = currentSetupPlayerId === uid
-
-  const setupZoneOptions: ZoneName[] = (() => {
-    if (!game.setupDiceRoll) return []
-    const d = game.setupDiceRoll as [number, number]
-    const z1 = DICE_TO_ZONE[d[0]], z2 = DICE_TO_ZONE[d[1]]
-    const candidates = z1 === z2 ? [z1] : [z1, z2]
-    const available = candidates.filter(z => !isZoneFull(z, game) && !game.zones[z].isClosed)
-    return available.length > 0 ? available : ['parking' as ZoneName]
-  })()
-
   const myDeclaredCharId = game.characterDeclarations[uid ?? '']?.characterId
   const currentDeclarerId = game?.declarationOrder.find(pid => !game.characterDeclarations[pid]) ?? null
   const mySealedZone = game.sealedDestinations[uid ?? '']?.targetZone
@@ -111,15 +69,6 @@ export default function ActionPanel({
   const myMovingChar = uid ? game.characterDeclarations[uid]?.characterId : undefined
   const myMovingCharData = myMovingChar ? game.characters[myMovingChar] : undefined
   // ── Handlers ──────────────────────────────────────────────────
-
-  async function handleRollSetup() {
-    if (!game || actionLoading) return
-    setActionLoading(true)
-    try {
-      const { state: next } = rollAndGetPlacementOptions(game)
-      await patchGameState(roomCode, { setupDiceRoll: next.setupDiceRoll })
-    } finally { setActionLoading(false) }
-  }
 
 
 
@@ -171,81 +120,10 @@ export default function ActionPanel({
   // ── Render ────────────────────────────────────────────────────
 
   switch (game!.phase) {
-    // ── 초기 배치 ───────────────────────────────────────────
+    // ── 초기 배치 (맵 위 SetupOverlay에서 처리) ────────────────
     case 'setup_place': {
-      if (!currentSetupPlayerId) return <p className="text-zinc-400 text-sm">배치 완료 대기 중...</p>
-      const currentOwner = players[currentSetupPlayerId]
-
-      if (!isMyTurnToPlace) {
-        const d = game!.setupDiceRoll as [number, number] | null
-        return (
-          <div className="text-center">
-            <p className="text-zinc-400 text-sm mb-2">
-              <span className="text-white font-bold">{currentOwner?.nickname}</span>님이 캐릭터 배치 중...
-            </p>
-            {d ? (
-              setupDiceTopReady ? (
-                <>
-                  <div className="flex justify-center gap-2 mb-1">
-                    {d.map((v, i) => (
-                      <div key={i} className="w-10 h-10 bg-zinc-700 rounded-xl flex items-center justify-center text-xl font-bold text-white">{v}</div>
-                    ))}
-                  </div>
-                  <p className="text-yellow-400 text-xs font-semibold">
-                    → {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
-                  </p>
-                </>
-              ) : (
-                <p className="text-zinc-500 text-xs animate-pulse">굴리는 중...</p>
-              )
-            ) : (
-              <p className="text-zinc-600 text-xs">주사위 대기 중...</p>
-            )}
-            <p className="text-zinc-700 text-xs mt-1">남은 배치: {game!.setupPlacementOrder.length}번</p>
-          </div>
-        )
-      }
-
-      if (!game!.setupDiceRoll) {
-        return (
-          <div>
-            <p className="text-white text-sm font-bold mb-3">내 차례 — 주사위를 굴려 배치 구역을 결정하세요</p>
-            <button onClick={handleRollSetup} disabled={actionLoading}
-              className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-semibold px-6 py-2 rounded-xl text-sm transition-colors">
-              {actionLoading ? '굴리는 중...' : '🎲 주사위 굴리기'}
-            </button>
-          </div>
-        )
-      }
-
-      const d = game!.setupDiceRoll as [number, number]
-      const displayD = setupDiceAnim ?? d
-      const isNewSetupDice = d.join(',') !== lastSetupDiceKey.current
-      const showSetupResult = !setupDiceAnim && !isNewSetupDice
       return (
-        <div className="text-center">
-          {isNewSetupDice && !setupDiceAnim ? (
-            <p className="text-zinc-500 text-xs animate-pulse mb-2">굴리는 중...</p>
-          ) : (
-            <div className="flex justify-center gap-3 mb-2">
-              {(displayD as [number, number]).map((v, i) => (
-                <div key={`${i}-${v}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white">{v}</div>
-              ))}
-            </div>
-          )}
-          {showSetupResult && (
-            <>
-              <p className="text-yellow-400 text-sm font-bold mb-1">
-                {setupZoneOptions.map(z => ZONE_CONFIGS[z].displayName).join(' 또는 ')}
-              </p>
-              <p className="text-zinc-500 text-xs">
-                {selectedSetupCharId
-                  ? `${CHARACTER_CONFIGS[game!.characters[selectedSetupCharId]?.characterId]?.name} 선택됨 — 맵에서 구역을 클릭하세요`
-                  : '맵 하단 카드에서 캐릭터를 선택하세요'}
-              </p>
-            </>
-          )}
-        </div>
+        <p className="text-zinc-500 text-sm text-center animate-pulse">🎲 초기 캐릭터 배치 중...</p>
       )
     }
 
