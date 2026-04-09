@@ -32,11 +32,12 @@ export default function DiceOverlay({
     if (lastDiceKey.current === key) return
     lastDiceKey.current = key
     const real = game.lastDiceRoll.dice
+    setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
     let count = 0
     const timer = setInterval(() => {
-      setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
       count++
       if (count >= 8) { clearInterval(timer); setDiceAnim(null) }
+      else setDiceAnim(real.map(() => Math.ceil(Math.random() * 6)))
     }, 120)
     return () => clearInterval(timer)
   }, [phase, game.lastDiceRoll, isSheriff, isRealSheriff])
@@ -144,16 +145,22 @@ export default function DiceOverlay({
   return (
     <Wrapper onShowMap={onShowMap} title="🎲 주사위 결과 (보안관만 확인 가능)">
       <div className="text-center">
-        {/* 주사위 애니메이션 */}
+        {/* 주사위 애니메이션 — 애니 전/중에는 랜덤값, 완료 후에는 실제 결과 */}
         <div className="flex justify-center gap-2 mb-4">
-          {(diceAnim ?? roll.dice).map((d, i) => (
-            <div key={`${i}-${d}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white shadow-lg">
-              {d}
-            </div>
-          ))}
+          {(() => {
+            const isPreAnim = lastDiceKey.current !== roll.dice.join(',')
+            const displayDice = diceAnim ?? (isPreAnim
+              ? roll.dice.map(() => Math.ceil(Math.random() * 6))
+              : roll.dice)
+            return displayDice.map((d, i) => (
+              <div key={`${i}-${d}`} className="dice-roll w-12 h-12 bg-zinc-700 rounded-xl flex items-center justify-center text-2xl font-bold text-white shadow-lg">
+                {d}
+              </div>
+            ))
+          })()}
         </div>
-        {/* 구역별 좀비 배치 */}
-        {!diceAnim && (
+        {/* 구역별 좀비 배치 — 애니메이션 완료 후에만 표시 */}
+        {!diceAnim && lastDiceKey.current === roll.dice.join(',') && (
           <>
             <div className="flex flex-wrap justify-center gap-2 mb-3">
               {Object.entries(roll.zombiesByZone).map(([zone, count]) => (

@@ -14,7 +14,7 @@ export default function PlayerSidebar({ game, players, uid, sheriffId }: PlayerS
     <div className="hidden md:block w-44 bg-zinc-900 border-l border-zinc-800 p-3 overflow-y-auto shrink-0">
       <p className="text-xs text-zinc-500 mb-3">플레이어</p>
       <div className="space-y-2">
-        {game.playerOrder.map(playerId => {
+        {[...game.playerOrder.slice(game.sheriffIndex), ...game.playerOrder.slice(0, game.sheriffIndex)].map(playerId => {
           const player = players[playerId]
           const isSheriff = playerId === sheriffId
           const aliveChars = Object.values(game.characters)
@@ -103,7 +103,7 @@ export function MobilePlayerList({ game, players, uid, sheriffId }: MobilePlayer
   return (
     <div className="md:hidden mt-3 -mx-3 px-3 pb-1">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {game.playerOrder.map(playerId => {
+        {[...game.playerOrder.slice(game.sheriffIndex), ...game.playerOrder.slice(0, game.sheriffIndex)].map(playerId => {
           const player = players[playerId]
           const isSheriff = playerId === sheriffId
           const aliveChars = Object.values(game.characters).filter(c => c.playerId === playerId && c.isAlive)
