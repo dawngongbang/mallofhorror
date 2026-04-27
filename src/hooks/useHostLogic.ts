@@ -11,6 +11,15 @@ import { calculateVoteResult } from '../engine/combat'
 import { EVENT_ZONE_ORDER, ZONE_CONFIGS } from '../engine/constants'
 import type { GameState, Player, ZoneName } from '../engine/types'
 
+// isConnected만 보면 순간 끊김에도 자동 처리가 발생하므로
+// lastSeen 기준 20초 이상 응답 없을 때만 "실제 오프라인"으로 판정
+const OFFLINE_THRESHOLD_MS = 20_000
+function isEffectivelyOffline(player: Player | undefined): boolean {
+  if (!player) return true
+  if (player.isConnected) return false
+  return Date.now() - player.lastSeen > OFFLINE_THRESHOLD_MS
+}
+
 interface GameSettings {
   sealTime?: number
   votingTime?: number
@@ -48,7 +57,7 @@ export function useHostLogic(params: {
         // character_select: 연결 끊긴 플레이어 자동 선언
         else if (game.phase === 'character_select') {
           const currentDeclarer = game.declarationOrder.find(pid => !game.characterDeclarations[pid])
-          if (currentDeclarer && players[currentDeclarer]?.isConnected === false) {
+          if (currentDeclarer && isEffectivelyOffline(players[currentDeclarer])) {
             const firstChar = Object.values(game.characters).find(c => c.playerId === currentDeclarer && c.isAlive)
             if (firstChar) {
               const autoOrder = Object.keys(game.characterDeclarations).length
@@ -81,7 +90,7 @@ export function useHostLogic(params: {
             Object.values(game.characters).some(c => c.playerId === pid && c.isAlive)
           )
           const disconnectedUnsettled = alivePlayers.filter(pid =>
-            players[pid]?.isConnected === false && !game.destinationStatus[pid]
+            isEffectivelyOffline(players[pid]) && !game.destinationStatus[pid]
           )
           if (disconnectedUnsettled.length > 0) {
             const statusPatch: Record<string, boolean> = {}
