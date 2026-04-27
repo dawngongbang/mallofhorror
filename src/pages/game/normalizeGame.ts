@@ -72,6 +72,7 @@ export function normalizeGame(g: GameState): GameState {
                               ? { entries: Array.isArray(g.lastZombiePlayerAnnounce.entries) ? g.lastZombiePlayerAnnounce.entries : Object.values(g.lastZombiePlayerAnnounce.entries ?? {}) }
                               : null,
     lastItemSearchAnnounce:   g.lastItemSearchAnnounce ?? null,
+    itemDeck:                 Array.isArray(g.itemDeck) ? g.itemDeck : [],
     zombieSpawnBatches:       Array.isArray(g.zombieSpawnBatches) ? g.zombieSpawnBatches : null,
     zombieSpawnStep:          g.zombieSpawnStep ?? 0,
     justElectedSheriffId:           g.justElectedSheriffId ?? null,
