@@ -77,11 +77,14 @@ export function calculateVoteResult(
   }
 
   // 투표 집계 (투표권 가중치 반영)
+  // 전체 투표(round >= MAX_REVOTE_COUNT) 시 구역 외 플레이어도 최소 1표 보장
+  const isGlobalVote = voteState.round >= MAX_REVOTE_COUNT
   for (const [voterId, targetId] of Object.entries(voteState.votes)) {
     if (tally[targetId] === undefined) continue
     const base = getVoteWeight(voterId, voteState.zone, state)
+    const effective = isGlobalVote ? Math.max(1, base) : base
     const bonus = voteState.bonusVoteWeights[voterId] ?? 0
-    tally[targetId] += base + bonus
+    tally[targetId] += effective + bonus
   }
 
   const maxVotes = Math.max(...Object.values(tally))

@@ -271,7 +271,7 @@ export function useHostLogic(params: {
             const result = calculateVoteResult(cv, game)
             // 좀비 공격 5회 동률 초과 → 랜덤 선택 표시
             const isTie = !result.winner
-            const isRandomPickCase = isTie && cv.type === 'zombie_attack' && cv.round >= 4
+            const isRandomPickCase = isTie && cv.round >= 4
             const randomWinnerId = isRandomPickCase
               ? cv.candidates[Math.floor(Math.random() * cv.candidates.length)]
               : undefined

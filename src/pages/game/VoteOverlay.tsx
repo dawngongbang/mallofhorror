@@ -91,6 +91,16 @@ export default function VoteOverlay({
     vote.type === 'truck_search' ? '트럭 수색' : '보안관 선출'
   const voteIcon = vote.type === 'zombie_attack' ? '🧟' :
     vote.type === 'truck_search' ? '🚚' : '👮'
+  const isBadVote = vote.type === 'zombie_attack'
+  // 좋은투표 = 파란색, 나쁜투표 = 빨간색
+  const btnSelected  = isBadVote ? 'bg-red-700 ring-2 ring-red-400 text-white scale-105'
+    : 'bg-blue-700 ring-2 ring-blue-400 text-white scale-105'
+  const btnHoverable = isBadVote ? 'bg-zinc-800 hover:bg-red-900/80 border border-zinc-600 hover:border-red-500 text-white'
+    : 'bg-zinc-800 hover:bg-blue-900/80 border border-zinc-600 hover:border-blue-500 text-white'
+  const btnConfirm   = isBadVote ? 'bg-red-600 hover:bg-red-500 disabled:bg-zinc-700'
+    : 'bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700'
+  const statusDone   = isBadVote ? 'bg-red-950/60 border border-red-800/60 text-red-300'
+    : 'bg-blue-950/60 border border-blue-800/60 text-blue-300'
   const candidates = (vote.candidates ?? []).map(id => ({
     id, nickname: players[id]?.nickname ?? '?', color: players[id]?.color ?? 'red',
   }))
@@ -146,14 +156,20 @@ export default function VoteOverlay({
             return (
               <div key={candidateId}
                 className={`flex items-center justify-between rounded-xl px-3 py-2 transition-all
-                  ${isWinner ? (announce.isRandomPick ? 'bg-orange-950/80 border border-orange-600' : 'bg-red-950/80 border border-red-700') : 'bg-zinc-900/60'}`}>
+                  ${isWinner
+                    ? announce.isRandomPick
+                      ? 'bg-orange-950/80 border border-orange-600'
+                      : isBadVote
+                        ? 'bg-red-950/80 border border-red-700'
+                        : 'bg-blue-950/80 border border-blue-700'
+                    : 'bg-zinc-900/60'}`}>
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${COLOR_BG[players[candidateId]?.color ?? ''] ?? 'bg-zinc-500'}`} />
                   <span className={`text-sm font-bold ${isWinner ? 'text-white' : 'text-zinc-400'}`}>
                     {players[candidateId]?.nickname ?? '?'}
                   </span>
                 </div>
-                <span className={`text-sm font-bold ${isWinner ? (announce.isRandomPick ? 'text-orange-400' : 'text-red-400') : 'text-zinc-500'}`}>
+                <span className={`text-sm font-bold ${isWinner ? (announce.isRandomPick ? 'text-orange-400' : isBadVote ? 'text-red-400' : 'text-blue-400') : 'text-zinc-500'}`}>
                   {announce.isRandomPick ? '' : `${votes}표 `}{isWinner ? winnerIcon : `${votes}표`}
                 </span>
               </div>
@@ -190,9 +206,9 @@ export default function VoteOverlay({
             disabled={!canVote || myVoteConfirmed || actionLoading}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all
               ${myVote === c.id
-                ? 'bg-red-700 ring-2 ring-red-400 text-white scale-105'
+                ? btnSelected
                 : canVote && !myVoteConfirmed
-                ? 'bg-zinc-800 hover:bg-red-900/80 border border-zinc-600 hover:border-red-500 text-white'
+                ? btnHoverable
                 : 'bg-zinc-800/50 border border-zinc-700 text-zinc-500'
               } disabled:cursor-not-allowed`}>
             <div className={`w-3 h-3 rounded-full shrink-0 ${COLOR_BG[c.color]}`} />
@@ -211,7 +227,7 @@ export default function VoteOverlay({
           </p>
         ) : myVote ? (
           <button onClick={handleConfirmVote} disabled={actionLoading}
-            className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white font-bold px-8 py-2.5 rounded-xl text-sm transition-colors animate-pulse">
+            className={`${btnConfirm} text-white font-bold px-8 py-2.5 rounded-xl text-sm transition-colors animate-pulse`}>
             {actionLoading ? '처리 중...' : `✔ ${players[myVote]?.nickname} 확정`}
           </button>
         ) : (
@@ -228,7 +244,7 @@ export default function VoteOverlay({
             return (
               <div key={voterId}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs
-                  ${confirmed ? 'bg-red-950/60 border border-red-800/60 text-red-300' : 'bg-zinc-800/60 border border-zinc-700 text-zinc-500'}`}>
+                  ${confirmed ? statusDone : 'bg-zinc-800/60 border border-zinc-700 text-zinc-500'}`}>
                 <div className={`w-2 h-2 rounded-full ${COLOR_BG[players[voterId]?.color ?? ''] ?? 'bg-zinc-500'}`} />
                 <span>{players[voterId]?.nickname ?? '?'}</span>
                 <span>{confirmed ? '✓' : '…'}</span>
@@ -250,17 +266,19 @@ function Wrapper({
   title: string
   type: string
 }) {
-  const accentCls = type === 'zombie_attack' ? 'border-red-800/70' :
-    type === 'truck_search' ? 'border-yellow-700/70' : 'border-yellow-600/70'
+  const isBadVote = type === 'zombie_attack'
+  const borderCls = isBadVote ? 'border-red-800/70' : 'border-blue-700/60'
+  const headerCls = isBadVote ? 'bg-red-950/60 border-red-900/60' : 'bg-blue-950/50 border-blue-900/50'
+  const titleCls  = isBadVote ? 'text-red-200' : 'text-blue-200'
 
   return (
     <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
       z-30 flex flex-col rounded-2xl overflow-hidden shadow-2xl
       w-[80%] max-h-[80%]
-      bg-zinc-900/96 border ${accentCls} backdrop-blur-sm`}>
+      bg-zinc-900/96 border ${borderCls} backdrop-blur-sm`}>
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-        <span className="text-white text-sm font-bold truncate">{title}</span>
+      <div className={`flex items-center justify-between px-4 py-3 border-b ${headerCls} shrink-0`}>
+        <span className={`text-sm font-bold truncate ${titleCls}`}>{title}</span>
         <button onClick={onShowMap}
           className="text-zinc-400 hover:text-white text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg transition-colors shrink-0 ml-2">
           🗺️ 맵 보기
