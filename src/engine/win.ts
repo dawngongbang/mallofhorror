@@ -8,6 +8,11 @@ const NON_PARKING_ZONES: ZoneName[] = ['bathroom', 'clothing', 'toy', 'security'
 export function checkWinCondition(state: GameState): WinCheckResult {
   const aliveCharacters = Object.values(state.characters).filter(c => c.isAlive)
 
+  // 생존 캐릭터 없음 → 전원 탈락
+  if (aliveCharacters.length === 0) {
+    return { gameOver: true, winners: [], finalScores: {} }
+  }
+
   // 주차장 외 모든 구역이 폐쇄 → 생존 가능한 구역 없음 → 전원 탈락
   const allNonParkingClosed = NON_PARKING_ZONES.every(z => state.zones[z]?.isClosed)
   if (allNonParkingClosed) {
