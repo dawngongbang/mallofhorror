@@ -378,7 +378,7 @@ export default function GamePage({ roomCode, onLeave }: Props) {
 
       {/* 액션 배너 — 내 행동이 필요할 때 헤더 아래 표시 */}
       {(() => {
-        if (!uid || isSpectator) return null
+        if (!uid || isSpectator) return <div className="h-9 border-b border-transparent shrink-0" />
         const pvs = game.pendingVictimSelection
         const myVoteConfirmed = !!(game.currentVote?.status[uid])
         const canVote = !!(game.currentVote?.eligibleVoters.includes(uid))
@@ -424,15 +424,18 @@ export default function GamePage({ roomCode, onLeave }: Props) {
           action = () => setShowTruckOverlay(true)
         }
 
-        if (!text) return null
         return (
-          <div className={`flex items-center justify-between px-4 py-2 border-b shrink-0 ${color}`}>
-            <span className="text-xs font-bold animate-pulse">{text}</span>
-            {action && (
-              <button onClick={action}
-                className="text-xs bg-white/15 hover:bg-white/25 px-3 py-1 rounded-lg transition-colors font-medium shrink-0 ml-3">
-                바로가기
-              </button>
+          <div className={`flex items-center justify-between px-4 h-9 border-b shrink-0 transition-colors ${text ? color : 'border-transparent'}`}>
+            {text && (
+              <>
+                <span className="text-xs font-bold animate-pulse">{text}</span>
+                {action && (
+                  <button onClick={action}
+                    className="text-xs bg-white/15 hover:bg-white/25 px-3 py-1 rounded-lg transition-colors font-medium shrink-0 ml-3">
+                    바로가기
+                  </button>
+                )}
+              </>
             )}
           </div>
         )
