@@ -20,6 +20,7 @@ import TruckSearchOverlay from './game/TruckSearchOverlay'
 import DiceOverlay from './game/DiceOverlay'
 import SetupOverlay from './game/SetupOverlay'
 import PlayerSidebar, { MobilePlayerList } from './game/PlayerSidebar'
+import ZoneAnnounceOverlay from './game/ZoneAnnounceOverlay'
 import {
   PHASE_LABEL, CHAR_ICON, ITEM_CATEGORY,
   ZONE_MAP_POSITIONS, getZoneCenter, getHandCardPos, getPlayerSpawnPos,
@@ -74,6 +75,8 @@ export default function GamePage({ roomCode, onLeave }: Props) {
   const [showDiceOverlay, setShowDiceOverlay] = useState(false)
   // 초기 배치 오버레이
   const [showSetupOverlay, setShowSetupOverlay] = useState(false)
+  // 구역 공지 오버레이 (zone_announce 진입 후 2.5초간 표시)
+  const [showZoneAnnounceOverlay, setShowZoneAnnounceOverlay] = useState(false)
   const uid = getCurrentUid()
 
   const isHost = meta?.hostId === uid
@@ -135,6 +138,14 @@ export default function GamePage({ roomCode, onLeave }: Props) {
     if (game?.itemSearchPreview) setShowTruckOverlay(true)
     else setShowTruckOverlay(false)
   }, [!!game?.itemSearchPreview])
+
+  // 구역 공지: zone_announce 진입 또는 구역 변경 시 2.5초간 오버레이 표시
+  useEffect(() => {
+    if (game?.phase !== 'zone_announce') { setShowZoneAnnounceOverlay(false); return }
+    setShowZoneAnnounceOverlay(true)
+    const timer = setTimeout(() => setShowZoneAnnounceOverlay(false), 2500)
+    return () => clearTimeout(timer)
+  }, [game?.phase, game?.currentEventZoneIndex])
 
   // 페이즈 전환 시 hoveredZone 초기화 (이전 페이즈 하이라이트 잔재 방지)
   useEffect(() => {
@@ -648,6 +659,15 @@ export default function GamePage({ roomCode, onLeave }: Props) {
                 </div>
               )
             })()}
+
+            {/* 구역 공지 오버레이 */}
+            {game.phase === 'zone_announce' && showZoneAnnounceOverlay && (
+              <ZoneAnnounceOverlay
+                game={game}
+                players={players}
+                onShowMap={() => setShowZoneAnnounceOverlay(false)}
+              />
+            )}
 
             {/* 초기 배치 오버레이 */}
             {game.phase === 'setup_place' && showSetupOverlay && (
