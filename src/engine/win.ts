@@ -1,20 +1,24 @@
 import type { GameState, WinCheckResult, ZoneName } from './types'
 import { CHARACTER_CONFIGS } from './constants'
 
+const NON_PARKING_ZONES: ZoneName[] = ['bathroom', 'clothing', 'toy', 'security', 'supermarket']
+
 // 승리 조건 체크
 // 전체 생존 캐릭터 ≤ 4 AND 주차장 제외 한 구역에 모두 집결
 export function checkWinCondition(state: GameState): WinCheckResult {
   const aliveCharacters = Object.values(state.characters).filter(c => c.isAlive)
 
+  // 주차장 외 모든 구역이 폐쇄 → 생존 가능한 구역 없음 → 전원 탈락
+  const allNonParkingClosed = NON_PARKING_ZONES.every(z => state.zones[z]?.isClosed)
+  if (allNonParkingClosed) {
+    return { gameOver: true, winners: [], finalScores: {} }
+  }
+
   // 생존 캐릭터가 4개 초과면 아직 게임 진행
   if (aliveCharacters.length > 4) return { gameOver: false }
 
   // 주차장 제외 구역 중 모든 생존 캐릭터가 한 구역에 있는지 확인
-  const nonParkingZones: ZoneName[] = [
-    'bathroom', 'clothing', 'toy', 'security', 'supermarket',
-  ]
-
-  for (const zone of nonParkingZones) {
+  for (const zone of NON_PARKING_ZONES) {
     const zoneCharIds = state.zones[zone].characterIds.filter(
       id => state.characters[id]?.isAlive
     )

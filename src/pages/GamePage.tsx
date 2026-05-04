@@ -376,6 +376,68 @@ export default function GamePage({ roomCode, onLeave }: Props) {
         )
       })()}
 
+      {/* 액션 배너 — 내 행동이 필요할 때 헤더 아래 표시 */}
+      {(() => {
+        if (!uid || isSpectator) return null
+        const pvs = game.pendingVictimSelection
+        const myVoteConfirmed = !!(game.currentVote?.status[uid])
+        const canVote = !!(game.currentVote?.eligibleVoters.includes(uid))
+        const myDestConfirmed = !!(game.destinationStatus[uid])
+
+        let text = ''
+        let color = ''
+        let action: (() => void) | null = null
+
+        if (pvs && !pvs.chosenCharacterId && pvs.loserPlayerId === uid) {
+          text = '💀 희생할 캐릭터를 선택하세요'
+          color = 'bg-red-950/95 border-red-700 text-red-200'
+          action = () => setShowVoteOverlay(true)
+        } else if (game.phase === 'setup_place' && game.setupPlacementOrder[0] === uid) {
+          text = '⚡ 내 차례 — 배치할 구역을 선택하세요'
+          color = 'bg-yellow-950/95 border-yellow-700 text-yellow-200'
+          action = () => setShowSetupOverlay(true)
+        } else if (game.phase === 'character_select' && currentDeclarerId === uid && !myDeclaredCharId) {
+          text = '⚡ 내 차례 — 이동할 캐릭터를 선택하세요'
+          color = 'bg-yellow-950/95 border-yellow-700 text-yellow-200'
+          action = () => setHandTab('chars')
+        } else if (game.phase === 'destination_seal' && !myDestConfirmed) {
+          text = '📍 목적지를 선택하고 확정하세요'
+          color = 'bg-blue-950/95 border-blue-700 text-blue-200'
+        } else if (game.phase === 'voting' && canVote && !myVoteConfirmed) {
+          const isBad = game.currentVote?.type === 'zombie_attack'
+          text = isBad ? '🧟 희생자 투표를 완료하세요' : '🗳️ 투표를 완료하세요'
+          color = isBad ? 'bg-red-950/95 border-red-700 text-red-200' : 'bg-blue-950/95 border-blue-700 text-blue-200'
+          action = () => setShowVoteOverlay(true)
+        } else if (game.phase === 'weapon_use' && !game.weaponUseStatus[uid]) {
+          const zone = EVENT_ZONE_ORDER[game.currentEventZoneIndex]
+          const amInZone = game.zones[zone]?.characterIds.some(
+            id => game.characters[id]?.playerId === uid && game.characters[id]?.isAlive
+          )
+          if (amInZone) {
+            text = '🔫 아이템 사용 여부를 결정하세요'
+            color = 'bg-orange-950/95 border-orange-700 text-orange-200'
+            action = () => setHandTab('items')
+          }
+        } else if (game.phase === 'event' && game.itemSearchWinnerId === uid && game.itemSearchPreview) {
+          text = '🚚 트럭 수색 — 아이템을 선택하세요'
+          color = 'bg-blue-950/95 border-blue-700 text-blue-200'
+          action = () => setShowTruckOverlay(true)
+        }
+
+        if (!text) return null
+        return (
+          <div className={`flex items-center justify-between px-4 py-2 border-b shrink-0 ${color}`}>
+            <span className="text-xs font-bold animate-pulse">{text}</span>
+            {action && (
+              <button onClick={action}
+                className="text-xs bg-white/15 hover:bg-white/25 px-3 py-1 rounded-lg transition-colors font-medium shrink-0 ml-3">
+                바로가기
+              </button>
+            )}
+          </div>
+        )
+      })()}
+
       {/* 숨기/등장 공지 + weapon_use 결과 + 좀비 플레이어 공지 + 트럭 수색 완료 — fixed 오버레이 */}
       {(game.lastHideRevealAnnounce || game.lastWeaponUseAnnounce || game.lastZombiePlayerAnnounce || game.lastItemSearchAnnounce) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none" style={{maxWidth: '90vw'}}>

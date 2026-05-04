@@ -227,13 +227,13 @@ export default function ActionPanel({
           {doneMoves.map((m, i) => {
             const charConf = CHARACTER_CONFIGS[game!.characters[m.characterId]?.characterId]
             const pName = players[m.playerId]?.nickname ?? m.playerId
-            const toName = ZONE_CONFIGS[m.targetZone]?.displayName ?? m.targetZone
+            const toName = ZONE_CONFIGS[m.bumpedToParking ? m.intendedZone : m.targetZone]?.displayName ?? m.targetZone
             const fromName = ZONE_CONFIGS[m.fromZone]?.displayName ?? m.fromZone
             return (
               <div key={i} className="text-xs text-zinc-500 mb-1">
                 <span className="text-zinc-400">{pName}의 {charConf?.name}</span>
                 {m.bumpedToParking
-                  ? <> {fromName}→<span className="text-red-400">{toName}(주차장)</span> ✗</>
+                  ? <> {fromName}→<span className="text-red-400">{toName}(주차장 튕김)</span> ✗</>
                   : <> {fromName}→<span className="text-green-400">{toName}</span> ✓</>
                 }
               </div>
